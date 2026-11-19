@@ -9,7 +9,7 @@ from src.agent.graph import OceanAgent
 from src.conversations.memory_repository import InMemoryConversationRepository
 from src.conversations.models import Message, MessageRole
 from src.core.config import get_settings
-from src.core.exceptions import ConfigurationError, GuardrailError, RetrievalError
+from src.core.exceptions import ConfigurationError, GuardrailError
 from src.mcp.client import MCPClient
 from src.security.validation import ChatRequest
 
@@ -54,7 +54,6 @@ async def chat(
 
         agent = OceanAgent(settings, MCPClient(settings))
         response_text = await agent.run(payload.message, history=history)
-        sources = agent.last_result.sources
 
         await repository.add_message(
             conversation.id,
@@ -70,7 +69,6 @@ async def chat(
         return ChatResponse(
             conversation_id=conversation.id,
             response=response_text,
-            sources=sources,
             request_id=request.state.request_id,
             duration_ms=duration_ms,
         )
@@ -79,10 +77,6 @@ async def chat(
 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ConfigurationError as exc:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except RetrievalError as exc:
         from fastapi import HTTPException
 
         raise HTTPException(status_code=503, detail=str(exc)) from exc
