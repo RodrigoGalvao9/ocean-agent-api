@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import structlog
 
 from src.api.middleware.request_id import RequestIDMiddleware
@@ -17,7 +18,19 @@ app = FastAPI(
     version="0.1.0",
     description="AI agent orchestration API with MCP tool integration",
 )
+
 app.add_middleware(RequestIDMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.state.conversation_repository = InMemoryConversationRepository()
 app.include_router(v1_router)
 logger = structlog.get_logger()
