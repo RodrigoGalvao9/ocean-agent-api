@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -47,6 +48,19 @@ class MCPClient:
                     async with ClientSession(read_stream, write_stream) as session:
                         await session.initialize()
                         result = await session.call_tool(name, dict(arguments))
-            return result.model_dump(by_alias=True, exclude_none=True)
+            payload = result.model_dump(by_alias=True, exclude_none=True)
+            structured = payload.get("structuredContent")
+            if isinstance(structured, dict):
+                return structured
+            for content in payload.get("content", []):
+                text = content.get("text") if isinstance(content, dict) else None
+                if isinstance(text, str):
+                    try:
+                        decoded = json.loads(text)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(decoded, dict):
+                        return decoded
+            return payload
         except Exception as exc:
             raise MCPError("unable to invoke MCP tool") from exc

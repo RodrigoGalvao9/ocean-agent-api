@@ -72,8 +72,12 @@ pytest -q
 - `src/security`: message/tool validation and initial safety guardrails
 - `src/observability`: structured JSON-style logging and request metadata
 
-The MCP server is queried for tools at runtime; this project does not define
-retrieval tools or recreate ingestion or vector database functionality.
+The MCP server is queried for tools at runtime. Chat requests require the
+`buscar_conhecimento(query, k)` retrieval tool discovered from that server;
+`get_fleet_state`, `listar_topicos`, and `set_speed` are not used as substitutes
+for knowledge retrieval. Retrieval occurs before the grounded answer stage, and
+discovery or invocation failures return a controlled service error rather than
+falling back to the LLM's pretrained knowledge.
 
 ## Separation from `ocean-rag-mcp`
 
@@ -91,11 +95,13 @@ conversation history, agent prompts and workflow, guardrails, and execution
 tracing. The API connects to the MCP server through Streamable HTTP and never
 connects directly to Qdrant or Cloudflare embeddings.
 
-The original multi-step maritime graph is not silently recreated here. Its
-decision nodes and prompts are the migration source for future API workflows;
-the current API provides a safe general-purpose ReAct foundation while that
-workflow is ported and tested. Keep `ocean-rag-mcp` independently deployable
-until the port is complete.
+The chat graph has explicit validation, MCP discovery, mandatory retrieval,
+retrieval evaluation, context construction, grounded answer generation, and
+final response validation stages. Empty retrieval results produce an explicit
+insufficient-evidence response. Retrieved document metadata is returned in the
+chat response's `sources` field, separately from the natural-language answer.
+Keep `ocean-rag-mcp` independently deployable; this API does not duplicate its
+Qdrant or embedding logic.
 
 ### Environment ownership
 
