@@ -1,4 +1,6 @@
-from langchain_core.messages import AIMessage, HumanMessage
+from collections.abc import Sequence
+
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.prebuilt import create_react_agent
 import structlog
 
@@ -16,7 +18,11 @@ class OceanAgent:
         self.mcp_client = mcp_client or MCPClient(settings)
         self.logger = structlog.get_logger()
 
-    async def run(self, message: str) -> str:
+    async def run(
+        self,
+        message: str,
+        history: Sequence[BaseMessage] = (),
+    ) -> str:
         clean_message = validate_user_message(message)
         llm = create_llm(self.settings)
 
@@ -30,7 +36,8 @@ class OceanAgent:
 
         graph = create_react_agent(llm, tools=tools, prompt=SYSTEM_PROMPT)
         self.logger.info("llm.execution_started", stage="llm_execution")
-        result = await graph.ainvoke({"messages": [HumanMessage(content=clean_message)]})
+        messages = [*history, HumanMessage(content=clean_message)]
+        result = await graph.ainvoke({"messages": messages})
 
         messages = result.get("messages", [])
         if messages:

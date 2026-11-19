@@ -2,6 +2,7 @@ from time import perf_counter
 
 import structlog
 from fastapi import APIRouter, Depends, Request
+from langchain_core.messages import AIMessage, HumanMessage
 
 from src.api.schemas import ChatResponse
 from src.agent.graph import OceanAgent
@@ -38,6 +39,13 @@ async def chat(
         else:
             conversation = await repository.create()
 
+        history = [
+            HumanMessage(content=item.content)
+            if item.role is MessageRole.USER
+            else AIMessage(content=item.content)
+            for item in conversation.messages
+            if item.role in (MessageRole.USER, MessageRole.ASSISTANT)
+        ]
         await repository.add_message(
             conversation.id,
             Message(role=MessageRole.USER, content=payload.message),
@@ -45,7 +53,7 @@ async def chat(
         logger.info("agent.started", stage="agent_started", conversation_id=conversation.id)
 
         agent = OceanAgent(settings, MCPClient(settings))
-        response_text = await agent.run(payload.message)
+        response_text = await agent.run(payload.message, history=history)
 
         await repository.add_message(
             conversation.id,

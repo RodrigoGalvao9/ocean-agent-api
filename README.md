@@ -75,6 +75,41 @@ pytest -q
 The MCP server is queried for tools at runtime; this project does not define
 retrieval tools or recreate ingestion or vector database functionality.
 
+## Separation from `ocean-rag-mcp`
+
+`ocean-rag-mcp` remains the source of truth for knowledge infrastructure:
+
+- FastMCP server and the registered `get_fleet_state`, `buscar_conhecimento`,
+  `listar_topicos`, and `set_speed` tools
+- Qdrant access, dense Cloudflare embeddings, sparse BM25 embeddings, hybrid
+  retrieval, ingestion, and document metadata
+- Fleet state, optimistic version checks, and idempotent speed updates
+
+This repository owns the responsibilities that were previously coupled to the
+interactive LangGraph application: HTTP entrypoints, Groq configuration,
+conversation history, agent prompts and workflow, guardrails, and execution
+tracing. The API connects to the MCP server through Streamable HTTP and never
+connects directly to Qdrant or Cloudflare embeddings.
+
+The original multi-step maritime graph is not silently recreated here. Its
+decision nodes and prompts are the migration source for future API workflows;
+the current API provides a safe general-purpose ReAct foundation while that
+workflow is ported and tested. Keep `ocean-rag-mcp` independently deployable
+until the port is complete.
+
+### Environment ownership
+
+| Variable | Owner |
+|---|---|
+| `GROQ_API_KEY`, `GROQ_MODEL` | `ocean-agent-api` |
+| `MCP_SERVER_URL`, `MCP_AUTH_TOKEN` | `ocean-agent-api` |
+| `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION` | `ocean-rag-mcp` |
+| Cloudflare embedding credentials/model | `ocean-rag-mcp` |
+
+The MCP server exposes `/health` independently and remains deployable on
+Render. Configure its bearer token in the API as `MCP_AUTH_TOKEN`; do not copy
+Qdrant or embedding credentials into this project.
+
 ## Docker
 
 ```bash

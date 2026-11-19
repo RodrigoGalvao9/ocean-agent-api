@@ -39,3 +39,25 @@ def test_conversation_crud(client):
     delete = client.delete(f"/api/v1/conversations/{conversation_id}")
     assert delete.status_code == 204
     assert client.get(f"/api/v1/conversations/{conversation_id}").status_code == 404
+
+
+def test_chat_passes_existing_history_to_agent(client):
+    observed = {}
+
+    async def run(message, history=()):
+        observed["message"] = message
+        observed["history"] = list(history)
+        return "Second response"
+
+    with patch("src.api.v1.routes.chat.OceanAgent") as agent_cls:
+        agent_cls.return_value.run = run
+        first = client.post("/api/v1/chat", json={"message": "First"})
+        conversation_id = first.json()["conversation_id"]
+        second = client.post(
+            "/api/v1/chat",
+            json={"message": "Second", "conversation_id": conversation_id},
+        )
+
+    assert second.status_code == 200
+    assert observed["message"] == "Second"
+    assert [item.content for item in observed["history"]] == ["First", "Second response"]
