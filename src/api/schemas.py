@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.conversations.models import Conversation, Message
 
@@ -8,6 +8,7 @@ from src.conversations.models import Conversation, Message
 class ChatResponse(BaseModel):
     conversation_id: str
     response: str
+    sources: list[dict[str, object]] = Field(default_factory=list)
     request_id: str
     duration_ms: float
 
