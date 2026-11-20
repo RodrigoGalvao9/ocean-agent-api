@@ -1,0 +1,97 @@
+# Infra local do Ocean: Redis + worker + Prometheus + Grafana.
+#
+#   docker compose up -d                 # Redis, worker, Prometheus, Grafana
+#   docker compose --profile api up -d   # inclui a API em container (opcional)
+#
+# Por padrão a API roda no seu terminal (uvicorn), com REDIS_URL=redis://localhost:6379/0.
+# Os containers enxergam a API do host por host.docker.internal:8000.
+# Pré-requisito: copie .env.example para .env e preencha.
+
+services:
+  redis:
+    image: redis:7-alpine
+    # volatile-lru: só expulsa chaves com TTL (contadores de limite e cache de coletas).
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: ocean-agent-api-redis-insight
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5540:5540"
+
+  worker:
+    build: .
+    command: ["python", "-m", "arq", "src.worker.settings.WorkerSettings"]
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "arq", "src.worker.settings.WorkerSettings", "--check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  api:
+    profiles: ["api"]
+    build: .
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      # O MCP roda no host (ocean-rag-mcp com PORT=8001).
+      MCP_SERVER_URL: http://host.docker.internal:8001/mcp
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-data:
