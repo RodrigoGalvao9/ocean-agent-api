@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: ocean-agent-api
+    metrics_path: /metrics
+    static_configs:
+      # A API no host (uvicorn) ou em container (profile "api"): ambas publicam a porta 8000.
+      - targets: ["host.docker.internal:8000"]
+    # Se você definir METRICS_TOKEN no .env, crie monitoring/metrics_token com o mesmo valor,
+    # monte-o no serviço prometheus e descomente:
+    # authorization:
+    #   type: Bearer
+    #   credentials_file: /etc/prometheus/metrics_token
