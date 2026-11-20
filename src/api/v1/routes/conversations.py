@@ -1,9 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from src.api.dependencies import get_owner_id, rate_limit_read
+
 from src.api.schemas import ConversationDetailResponse, ConversationSummary
 from src.conversations.memory_repository import InMemoryConversationRepository
 
-router = APIRouter(prefix="/conversations", tags=["conversations"])
+router = APIRouter(
+    prefix="/conversations",
+    tags=["conversations"],
+    dependencies=[Depends(rate_limit_read)],
+)
 
 
 def get_repository(request: Request) -> InMemoryConversationRepository:
@@ -13,8 +19,9 @@ def get_repository(request: Request) -> InMemoryConversationRepository:
 @router.get("", response_model=list[ConversationSummary])
 async def list_conversations(
     repository: InMemoryConversationRepository = Depends(get_repository),
+    owner_id: str = Depends(get_owner_id),
 ) -> list[ConversationSummary]:
-    conversations = await repository.list()
+    conversations = await repository.list(owner_id)
     return [
         ConversationSummary(
             id=item.id,
@@ -31,8 +38,9 @@ async def list_conversations(
 async def get_conversation(
     conversation_id: str,
     repository: InMemoryConversationRepository = Depends(get_repository),
+    owner_id: str = Depends(get_owner_id),
 ) -> ConversationDetailResponse:
-    conversation = await repository.get(conversation_id)
+    conversation = await repository.get(conversation_id, owner_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="conversation not found")
     return ConversationDetailResponse(**conversation.model_dump())
@@ -42,6 +50,7 @@ async def get_conversation(
 async def delete_conversation(
     conversation_id: str,
     repository: InMemoryConversationRepository = Depends(get_repository),
+    owner_id: str = Depends(get_owner_id),
 ) -> None:
-    if not await repository.delete(conversation_id):
+    if not await repository.delete(conversation_id, owner_id):
         raise HTTPException(status_code=404, detail="conversation not found")

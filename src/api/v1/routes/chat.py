@@ -4,6 +4,7 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 from langchain_core.messages import AIMessage, HumanMessage
 
+from src.api.dependencies import get_owner_id, rate_limit_chat
 from src.api.schemas import ChatResponse
 from src.agent.graph import OceanAgent
 from src.conversations.memory_repository import InMemoryConversationRepository
@@ -11,6 +12,7 @@ from src.conversations.models import Message, MessageRole
 from src.core.config import get_settings
 from src.core.exceptions import ConfigurationError, GuardrailError
 from src.mcp.client import MCPClient
+from src.observability.tracing import trace_request
 from src.security.validation import ChatRequest
 
 router = APIRouter(tags=["chat"])
@@ -21,11 +23,12 @@ def get_repository(request: Request) -> InMemoryConversationRepository:
     return request.app.state.conversation_repository
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse, dependencies=[Depends(rate_limit_chat)])
 async def chat(
     payload: ChatRequest,
     request: Request,
     repository: InMemoryConversationRepository = Depends(get_repository),
+    owner_id: str = Depends(get_owner_id),
 ) -> ChatResponse:
     started = perf_counter()
     settings = get_settings()
@@ -33,11 +36,11 @@ async def chat(
 
     try:
         if payload.conversation_id:
-            conversation = await repository.get(payload.conversation_id)
+            conversation = await repository.get(payload.conversation_id, owner_id)
             if conversation is None:
                 raise GuardrailError("conversation_id does not exist")
         else:
-            conversation = await repository.create()
+            conversation = await repository.create(owner_id)
 
         history = [
             HumanMessage(content=item.content)
@@ -53,7 +56,15 @@ async def chat(
         logger.info("agent.started", stage="agent_started", conversation_id=conversation.id)
 
         agent = OceanAgent(settings, MCPClient(settings))
-        response_text = await agent.run(payload.message, history=history)
+        with trace_request(
+            name="ocean-chat",
+            session_id=conversation.id,
+            user_id=owner_id,
+            input_text=payload.message,
+            tags=[settings.environment],
+        ) as trace:
+            response_text = await agent.run(payload.message, history=history)
+            trace.set_output(response_text)
 
         await repository.add_message(
             conversation.id,
