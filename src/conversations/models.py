@@ -22,6 +22,8 @@ class Message(BaseModel):
 class Conversation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     title: str | None = None
+    # Dono (hash). Fica fora de qualquer serialização/resposta da API.
+    owner_id: str | None = Field(default=None, exclude=True)
     messages: list[Message] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
