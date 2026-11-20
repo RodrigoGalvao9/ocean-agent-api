@@ -122,3 +122,25 @@ docker run --env-file .env -p 8000:8000 ocean-agent-api
 The included checks are initial guardrails, not complete prompt-injection
 protection. MCP results and retrieved documents must remain untrusted reference
 data. API errors do not expose credentials or internal exception details.
+## Proteção do chat público
+
+- **Limite por IP** (`RATE_LIMIT_CHAT_PER_MINUTE`, `RATE_LIMIT_CHAT_PER_DAY`), **limite global**
+  (`RATE_LIMIT_GLOBAL_PER_MINUTE`, protege a cota do Groq) e limite de leitura. Excedeu: `429` com
+  `Retry-After`. Com `REDIS_URL` o contador é compartilhado e sobrevive a deploys; se o Redis cair,
+  o limite continua em memória.
+- O IP vem do `X-Forwarded-For` conforme `TRUSTED_PROXY_HOPS` (Render = 1). O `X-Client-Id` **não**
+  entra no limite, só isola as conversas.
+- **Conversas isoladas**: o frontend envia `X-Client-Id` (UUID guardado no navegador); cada cliente
+  só lista, abre, apaga e continua as próprias conversas.
+- Teto de tamanho do corpo, de mensagens por conversa, de conversas em memória e de histórico
+  enviado ao LLM.
+- **CORS** só para `CORS_ORIGINS`.
+
+## Observabilidade
+
+- **Langfuse**: defina `LANGFUSE_PUBLIC_KEY` e `LANGFUSE_SECRET_KEY`. Cada pergunta vira um trace
+  `ocean-chat` (sessão = conversa, usuário = hash do cliente) com o classificador, o agente e as
+  ferramentas aninhados, e a nota `scope_in_scope` (1/0) da decisão de escopo.
+- **Prometheus/Grafana**: `GET /metrics` (`Authorization: Bearer $METRICS_TOKEN`). Séries principais:
+  `ocean_http_requests_total`, `ocean_scope_decisions_total`, `ocean_chat_outcomes_total`,
+  `ocean_mcp_calls_total`, `ocean_rate_limit_rejections_total`, `ocean_redis_errors_total`.
