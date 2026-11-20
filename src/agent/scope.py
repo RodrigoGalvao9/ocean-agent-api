@@ -3,6 +3,7 @@ from collections.abc import Sequence
 import structlog
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
 from src.agent.prompts.system import SCOPE_CLASSIFIER_PROMPT
@@ -30,6 +31,7 @@ async def classify_scope(
     llm: BaseChatModel,
     message: str,
     history: Sequence[BaseMessage] = (),
+    config: RunnableConfig | None = None,
 ) -> ScopeDecision:
     """Decide se a mensagem pertence ao domínio marítimo.
 
@@ -45,7 +47,8 @@ async def classify_scope(
                     content=f"Histórico recente:\n{_render_history(history)}\n\n"
                     f"Mensagem do usuário:\n{message}"
                 ),
-            ]
+            ],
+            config=config,
         )
         if isinstance(decision, ScopeDecision):
             return decision
