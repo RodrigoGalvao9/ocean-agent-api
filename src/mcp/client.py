@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
@@ -8,6 +9,7 @@ import structlog
 
 from src.core.config import Settings
 from src.core.exceptions import MCPError
+from src.observability.metrics import MCP_CALLS, MCP_LATENCY
 
 logger = structlog.get_logger()
 
@@ -48,12 +50,17 @@ class MCPClient:
                     yield session
 
     async def list_tools(self) -> list[dict[str, Any]]:
+        started = time.perf_counter()
         try:
             async with asyncio.timeout(self.settings.request_timeout_seconds):
                 async with self._session() as session:
                     result = await session.list_tools()
+            MCP_CALLS.labels(operation="list_tools", status="ok").inc()
+            MCP_LATENCY.labels(operation="list_tools").observe(time.perf_counter() - started)
             return [tool.model_dump(by_alias=True, exclude_none=True) for tool in result.tools]
         except Exception as exc:
+            MCP_CALLS.labels(operation="list_tools", status="error").inc()
+            MCP_LATENCY.labels(operation="list_tools").observe(time.perf_counter() - started)
             logger.error(
                 "mcp.list_tools_failed",
                 stage="mcp_tool_discovery",
@@ -65,12 +72,17 @@ class MCPClient:
             raise MCPError("unable to connect to or discover MCP tools") from exc
 
     async def invoke_tool(self, name: str, arguments: Mapping[str, Any]) -> Any:
+        started = time.perf_counter()
         try:
             async with asyncio.timeout(self.settings.request_timeout_seconds):
                 async with self._session() as session:
                     result = await session.call_tool(name, dict(arguments))
+            MCP_CALLS.labels(operation="invoke_tool", status="ok").inc()
+            MCP_LATENCY.labels(operation="invoke_tool").observe(time.perf_counter() - started)
             return result.model_dump(by_alias=True, exclude_none=True)
         except Exception as exc:
+            MCP_CALLS.labels(operation="invoke_tool", status="error").inc()
+            MCP_LATENCY.labels(operation="invoke_tool").observe(time.perf_counter() - started)
             logger.error(
                 "mcp.invoke_failed",
                 stage="mcp_tool_invoked",
