@@ -17,10 +17,26 @@ class Settings(BaseSettings):
     groq_model: str = "openai/gpt-oss-120b"
     mcp_server_url: str = "http://localhost:8001/mcp"
     mcp_auth_token: str = ""
-    # Ferramentas do MCP que o chat público pode usar (separadas por vírgula).
-    # set_speed / get_fleet_state ficam de fora de propósito.
-    allowed_tools: str = "buscar_conhecimento,listar_topicos"
+    # Ferramentas do MCP que o chat público pode usar (separadas por vírgula). Todas são de
+    # leitura. Nomes que o servidor ainda não expõe são ignorados na descoberta, então as
+    # ferramentas planejadas já podem estar na lista. Os aliases antigos em português
+    # (buscar_conhecimento, listar_topicos) ficam de fora de propósito: duplicariam as
+    # ferramentas em inglês para o modelo.
+    allowed_tools: str = (
+        "search_maritime_knowledge,list_knowledge_topics,"
+        "get_marine_conditions,get_tide_table,get_fishing_closures,"
+        "search_vessels,find_fish_markets"
+    )
+    # Timeout das chamadas ao MCP quando ele está "acordado" (respondeu há pouco).
     request_timeout_seconds: float = 30.0
+    # Partida a frio: no plano free do Render o MCP dorme após alguns minutos parado e
+    # leva dezenas de segundos para acordar. Sem resposta recente, esperamos mais.
+    mcp_cold_start_timeout_seconds: float = 60.0
+    mcp_warm_window_seconds: float = 600.0
+    # A lista de ferramentas muda raramente: guardamos por alguns minutos.
+    mcp_tools_cache_ttl_seconds: float = 300.0
+    # Limite do texto de cada ferramenta enviado ao modelo (controla custo em tokens).
+    max_tool_output_chars: int = 12_000
     log_level: str = "INFO"
     environment: str = "development"
 

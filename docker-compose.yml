@@ -51,8 +51,6 @@ services:
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379/0
-      # O MCP roda no host (ocean-rag-mcp com PORT=8001).
-      MCP_SERVER_URL: http://host.docker.internal:8001/mcp
       PORT: "8000"
     ports:
       - "8000:8000"
