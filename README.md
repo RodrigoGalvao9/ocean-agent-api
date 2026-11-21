@@ -76,8 +76,12 @@ O arquivo `.env.example` contém os nomes e os valores padrão de todas as opç�
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | Modelo usado pelo agente |
 | `MCP_SERVER_URL` | `http://localhost:8001/mcp` | URL do endpoint MCP |
 | `MCP_AUTH_TOKEN` | vazio | Token bearer enviado ao servidor MCP |
-| `ALLOWED_TOOLS` | `buscar_conhecimento,listar_topicos` | Lista separada por vírgulas das ferramentas MCP permitidas |
-| `REQUEST_TIMEOUT_SECONDS` | `30` | Timeout das operações MCP |
+| `ALLOWED_TOOLS` | `search_maritime_knowledge,list_knowledge_topics,get_marine_conditions,get_tide_table,get_fishing_closures,search_vessels,find_fish_markets` | Ferramentas MCP permitidas (somente leitura). Nomes que o servidor ainda não expõe são ignorados |
+| `REQUEST_TIMEOUT_SECONDS` | `30` | Timeout das operações MCP quando o servidor respondeu recentemente |
+| `MCP_COLD_START_TIMEOUT_SECONDS` | `60` | Timeout quando o MCP pode estar dormindo (plano gratuito do Render) |
+| `MCP_WARM_WINDOW_SECONDS` | `600` | Por quanto tempo, após uma resposta, o MCP é considerado acordado |
+| `MCP_TOOLS_CACHE_TTL_SECONDS` | `300` | Por quanto tempo a lista de ferramentas é reaproveitada |
+| `MAX_TOOL_OUTPUT_CHARS` | `12000` | Limite do texto de cada ferramenta enviado ao modelo |
 | `LOG_LEVEL` | `INFO` | Nível dos logs estruturados |
 | `ENVIRONMENT` | `development` | Ambiente de execução |
 
@@ -210,6 +214,33 @@ curl -X POST http://localhost:8000/api/v1/chat \
   }'
 ```
 
+A resposta inclui o texto, o identificador da conversa e as **fontes consultadas**:
+
+```json
+{
+  "conversation_id": "...",
+  "response": "A baixa-mar prevista em Santos amanhã é às 06h12...",
+  "request_id": "...",
+  "duration_ms": 4210.5,
+  "sources": [
+    {
+      "tool": "get_tide_table",
+      "name": "Tábuas de Marés 2026, Marinha do Brasil",
+      "url": "https://www.marinha.mil.br/chm/tabuas-de-mare",
+      "retrieved_at": "2026-11-21T12:00:00Z",
+      "data_timestamp": "2026-11-22T00:00:00Z",
+      "status": "ok",
+      "freshness": "reference",
+      "attribution": null,
+      "license": null,
+      "limitations": ["Previsão astronômica; não inclui efeitos do tempo."]
+    }
+  ]
+}
+```
+
+`sources` vem vazio quando nenhuma ferramenta foi usada (recusas, por exemplo). As fontes também ficam em `metadata.sources` de cada mensagem do assistente nas rotas de conversa. Quando uma fonte exige crédito (Open-Meteo, Global Fishing Watch), a atribuição é anexada ao final do texto pelo código, no formato `Atribuição: ...`.
+
 O cabeçalho `X-Client-Id` isola as conversas no repositório em memória. Um valor válido contém entre 16 e 64 caracteres alfanuméricos, `_` ou `-`. Quando o cabeçalho não é informado ou é inválido, o proprietário é derivado do endereço IP.
 
 ### Listagem de conversas
@@ -272,10 +303,11 @@ Uma requisição de chat passa pelas seguintes etapas:
 4. A conversa existente é localizada ou uma nova conversa é criada.
 5. A mensagem é classificada quanto ao escopo marítimo.
 6. Quando a mensagem está fora de escopo, o agente responde sem consultar ferramentas.
-7. Quando está dentro do escopo, o servidor MCP é consultado.
+7. Quando está dentro do escopo, o servidor MCP é consultado (a lista de ferramentas fica em cache por alguns minutos).
 8. Somente as ferramentas listadas em `ALLOWED_TOOLS` podem ser utilizadas.
-9. O LangGraph executa o agente com o histórico recente permitido.
-10. A resposta é validada e armazenada no histórico da conversa.
+9. O LangGraph executa o agente com o histórico recente permitido e a data de hoje (horário de Brasília) no prompt.
+10. Cada chamada de ferramenta devolve o contrato de proveniência do MCP (fonte, datas, status, limitações); falha de uma ferramenta vira uma resposta "indisponível" para o modelo explicar, e não um erro da API.
+11. A resposta, com as fontes e a atribuição exigida pelas licenças, é armazenada no histórico da conversa.
 
 As ferramentas MCP e os documentos recuperados são considerados dados não confiáveis. O agente é instruído a responder somente a partir dos resultados das ferramentas e não deve recriar conhecimento diretamente no modelo.
 
@@ -337,6 +369,8 @@ As métricas públicas incluem:
 - `ocean_chat_outcomes_total`;
 - `ocean_mcp_calls_total`;
 - `ocean_mcp_call_duration_seconds`;
+- `ocean_mcp_tool_calls_total` (por ferramenta e status);
+- `ocean_mcp_tool_duration_seconds` (por ferramenta);
 - `ocean_rate_limit_rejections_total`;
 - `ocean_redis_errors_total`.
 
@@ -438,7 +472,28 @@ Variáveis relacionadas ao conhecimento marítimo pertencem ao servidor MCP e n�
 - `QDRANT_COLLECTION`;
 - credenciais e modelo de embedding.
 
+### Contrato com o servidor MCP
+
+Toda ferramenta do servidor MCP devolve um objeto com `status` (`ok`, `partial`, `stale` ou `unavailable`), `source`, `source_url`, `retrieved_at`, `data_timestamp`, `freshness`, `attribution`, `license`, `data` e `limitations`. A API usa esses campos para montar `sources`, anexar atribuições e orientar o modelo a citar fonte e data e a admitir lacunas.
+
+Ferramentas esperadas em `ALLOWED_TOOLS` (todas de leitura):
+
+| Ferramenta | Função |
+|---|---|
+| `search_maritime_knowledge`, `list_knowledge_topics` | Conceitos, glossário e explicações |
+| `get_marine_conditions` | Vento, umidade, ondas e temperatura do mar |
+| `get_tide_table` | Preamar e baixa-mar |
+| `get_fishing_closures` | Defeso da pesca |
+| `search_vessels` | Busca de embarcações |
+| `find_fish_markets` | Onde vender pescado |
+
+Ao adicionar uma ferramenta nova no MCP, basta que ela use um desses nomes (ou acrescentar o nome em `ALLOWED_TOOLS`). Não é preciso alterar o código da API.
+
+**Ordem de deploy.** Publique primeiro o servidor MCP novo e depois esta API. No Render, remova a variável `ALLOWED_TOOLS` do serviço (para valer o padrão do código) ou atualize-a com os nomes acima; uma variável de ambiente definida no painel sobrescreve o padrão. Os nomes antigos em português (`buscar_conhecimento`, `listar_topicos`) continuam existindo no MCP apenas como aliases de transição e não devem ser liberados aqui.
+
 ## Limitações conhecidas
+
+- No plano gratuito do Render, o MCP dorme após alguns minutos parado. A primeira pergunta depois de uma pausa pode demorar até `MCP_COLD_START_TIMEOUT_SECONDS`; se o servidor não acordar nesse prazo, o agente recusa em vez de responder de memória.
 
 - As conversas são armazenadas somente em memória. Reinicializações apagam o histórico.
 - Sem Redis, os limites de requisição são válidos apenas dentro da instância que recebeu a requisição.

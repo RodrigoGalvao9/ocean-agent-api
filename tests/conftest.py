@@ -13,6 +13,15 @@ from src.main import app
 from src.security.rate_limit import build_rate_limiter
 
 
+@pytest.fixture(autouse=True)
+def _reset_mcp_state():
+    from src.mcp.client import reset_mcp_state
+
+    reset_mcp_state()
+    yield
+    reset_mcp_state()
+
+
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient

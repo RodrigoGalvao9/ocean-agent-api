@@ -34,6 +34,17 @@ MCP_LATENCY = Histogram(
     ["operation"],
     buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60),
 )
+MCP_TOOL_CALLS = Counter(
+    "ocean_mcp_tool_calls_total",
+    "Chamadas por ferramenta MCP",
+    ["tool", "status"],  # status: ok | partial | stale | unavailable | error
+)
+MCP_TOOL_LATENCY = Histogram(
+    "ocean_mcp_tool_duration_seconds",
+    "Duração das chamadas por ferramenta MCP",
+    ["tool"],
+    buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60),
+)
 RATE_LIMIT_HITS = Counter(
     "ocean_rate_limit_rejections_total",
     "Requisições recusadas por limite",
