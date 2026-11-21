@@ -19,6 +19,7 @@ Este repositório contém:
 - métricas Prometheus;
 - rastreamento opcional no Langfuse;
 - worker ARQ para coletas periódicas em segundo plano;
+- testes automatizados executados no GitHub Actions;
 - configuração de Redis, Prometheus e Grafana para desenvolvimento local.
 
 O projeto não contém modelos de recuperação vetorial, configuração do Qdrant ou credenciais de embedding.
@@ -420,16 +421,18 @@ Falhas de inicialização, envio ou atualização no Langfuse não devem interro
 Execute toda a suíte:
 
 ```bash
-pytest -q
+python -m pytest
 ```
 
 Execuções específicas:
 
 ```bash
-pytest -q tests/api
-pytest -q tests/security
-pytest -q tests/observability
-pytest -q tests/worker
+python -m pytest tests/api
+python -m pytest tests/security
+python -m pytest tests/observability
+python -m pytest tests/worker
+python -m pytest tests/mcp
+python -m pytest tests/core
 ```
 
 Os testes cobrem, entre outros comportamentos:
@@ -440,8 +443,13 @@ Os testes cobrem, entre outros comportamentos:
 - limites de tamanho e quantidade;
 - identificação do cliente;
 - interação com o MCP;
+- normalização dos resultados e dos schemas das ferramentas MCP;
+- proveniência das fontes e atribuição;
+- recusa de respostas quando não há fontes disponíveis;
 - tracing Langfuse;
 - cache e execução isolada dos coletores.
+
+O workflow [Tests](/C:/Users/Rodrigo/Desktop/Codigo/ocean-agent-api/.github/workflows/tests.yml) roda a suíte completa no GitHub Actions em Python 3.12 para pushes em `main`/`master` e para pull requests. Os testes não exigem credenciais externas.
 
 ## Arquitetura do repositório
 
@@ -511,6 +519,8 @@ As dependências diretas são declaradas em `pyproject.toml`. Para atualizar ou 
 python -m pip install pip-tools
 pip-compile pyproject.toml --extra test -o requirements.txt --upgrade
 ```
+
+Gere `requirements.txt` em Linux ou remova dependências específicas do Windows durante uma exportação feita no Windows. Dependências como `pywin32` devem usar o marcador `sys_platform == "win32"` para não serem instaladas no GitHub Actions.
 
 Para uma instalação limpa baseada no projeto:
 
