@@ -63,12 +63,17 @@ async def chat(
             input_text=payload.message,
             tags=[settings.environment],
         ) as trace:
-            response_text = await agent.run(payload.message, history=history)
-            trace.set_output(response_text)
+            result = await agent.run(payload.message, history=history)
+            trace.set_output(result.text)
 
+        sources = [source.model_dump(mode="json") for source in result.sources]
         await repository.add_message(
             conversation.id,
-            Message(role=MessageRole.ASSISTANT, content=response_text),
+            Message(
+                role=MessageRole.ASSISTANT,
+                content=result.text,
+                metadata={"sources": sources} if sources else {},
+            ),
         )
         duration_ms = round((perf_counter() - started) * 1000, 2)
         logger.info(
@@ -79,9 +84,10 @@ async def chat(
         )
         return ChatResponse(
             conversation_id=conversation.id,
-            response=response_text,
+            response=result.text,
             request_id=request.state.request_id,
             duration_ms=duration_ms,
+            sources=result.sources,
         )
     except GuardrailError as exc:
         from fastapi import HTTPException

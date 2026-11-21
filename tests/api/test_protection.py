@@ -1,5 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
+from src.agent.graph import AgentResult
+
 import pytest
 
 from src.core.config import Settings
@@ -10,7 +12,7 @@ CLIENT_B = {"X-Client-Id": "b" * 32}
 
 def _chat(client, message="oi", headers=None, **extra):
     with patch("src.api.v1.routes.chat.OceanAgent") as agent_cls:
-        agent_cls.return_value.run = AsyncMock(return_value="ok")
+        agent_cls.return_value.run = AsyncMock(return_value=AgentResult("ok"))
         return client.post("/api/v1/chat", json={"message": message, **extra}, headers=headers or {})
 
 

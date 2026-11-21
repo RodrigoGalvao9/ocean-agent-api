@@ -1,5 +1,8 @@
 from unittest.mock import AsyncMock, patch
 
+from src.agent.graph import AgentResult
+from src.core.sources import SourceRef
+
 
 def test_health(client):
     response = client.get("/health")
@@ -10,7 +13,7 @@ def test_health(client):
 
 def test_chat_creates_conversation_and_returns_metadata(client):
     with patch("src.api.v1.routes.chat.OceanAgent") as agent_cls:
-        agent_cls.return_value.run = AsyncMock(return_value="Hello")
+        agent_cls.return_value.run = AsyncMock(return_value=AgentResult("Hello"))
         with patch("src.api.v1.routes.chat.get_settings") as get_settings:
             get_settings.return_value.groq_api_key = "test"
             response = client.post("/api/v1/chat", json={"message": "Hi"})
@@ -29,7 +32,7 @@ def test_conversation_crud(client):
     assert list_response.json() == []
 
     with patch("src.api.v1.routes.chat.OceanAgent") as agent_cls:
-        agent_cls.return_value.run = AsyncMock(return_value="Response")
+        agent_cls.return_value.run = AsyncMock(return_value=AgentResult("Response"))
         chat = client.post("/api/v1/chat", json={"message": "Create me"})
 
     conversation_id = chat.json()["conversation_id"]
@@ -47,7 +50,7 @@ def test_chat_passes_existing_history_to_agent(client):
     async def run(message, history=()):
         observed["message"] = message
         observed["history"] = list(history)
-        return "Second response"
+        return AgentResult("Second response")
 
     with patch("src.api.v1.routes.chat.OceanAgent") as agent_cls:
         agent_cls.return_value.run = run
@@ -61,3 +64,31 @@ def test_chat_passes_existing_history_to_agent(client):
     assert second.status_code == 200
     assert observed["message"] == "Second"
     assert [item.content for item in observed["history"]] == ["First", "Second response"]
+
+
+def test_chat_returns_and_stores_sources(client):
+    source = SourceRef(
+        tool="get_tide_table",
+        name="Tábuas de Marés 2026, Marinha do Brasil",
+        retrieved_at="2026-11-21T12:00:00Z",
+        data_timestamp="2026-11-22T00:00:00Z",
+        status="ok",
+    )
+    with patch("src.api.v1.routes.chat.OceanAgent") as agent_cls:
+        agent_cls.return_value.run = AsyncMock(return_value=AgentResult("Resposta", [source]))
+        response = client.post("/api/v1/chat", json={"message": "maré em Santos amanhã?"})
+
+    body = response.json()
+    assert body["sources"][0]["name"].startswith("Tábuas de Marés")
+    assert body["sources"][0]["retrieved_at"] == "2026-11-21T12:00:00Z"
+
+    detail = client.get(f"/api/v1/conversations/{body['conversation_id']}").json()
+    assistant = detail["messages"][1]
+    assert assistant["metadata"]["sources"][0]["tool"] == "get_tide_table"
+
+
+def test_chat_without_sources_returns_empty_list(client):
+    with patch("src.api.v1.routes.chat.OceanAgent") as agent_cls:
+        agent_cls.return_value.run = AsyncMock(return_value=AgentResult("Olá"))
+        body = client.post("/api/v1/chat", json={"message": "oi"}).json()
+    assert body["sources"] == []
