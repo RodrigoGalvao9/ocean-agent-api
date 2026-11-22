@@ -16,6 +16,7 @@ anyio==4.16.0
     #   httpx2
     #   langsmith
     #   mcp
+    #   openai
     #   sse-starlette
     #   starlette
     #   watchfiles
@@ -41,13 +42,16 @@ click==8.5.1
     #   arq
     #   uvicorn
 colorama==0.4.6
-    # via pytest
+    # via
+    #   pytest
+    #   tqdm
 cryptography==50.0.2
     # via pyjwt
 distro==1.9.0
     # via
     #   groq
     #   langsmith
+    #   openai
 fakeredis==2.40.0
     # via ocean-agent-api (pyproject.toml)
 fastapi==0.165.0
@@ -76,6 +80,7 @@ httpx==0.28.1
     #   langgraph-sdk
     #   mcp
     #   ocean-agent-api (pyproject.toml)
+    #   openai
 httpx-sse==0.4.3
     # via mcp
 httpx2==2.16.2
@@ -88,6 +93,8 @@ idna==3.20
     #   requests
 iniconfig==2.3.1
     # via pytest
+jiter==0.19.0
+    # via openai
 jsonpatch==1.48
     # via langchain-core
 jsonpointer==3.12
@@ -102,12 +109,15 @@ langchain-core==0.3.86
     # via
     #   langchain
     #   langchain-groq
+    #   langchain-openai
     #   langchain-text-splitters
     #   langgraph
     #   langgraph-checkpoint
     #   langgraph-prebuilt
     #   ocean-agent-api (pyproject.toml)
 langchain-groq==0.3.8
+    # via ocean-agent-api (pyproject.toml)
+langchain-openai==0.3.35
     # via ocean-agent-api (pyproject.toml)
 langchain-text-splitters==0.3.11
     # via langchain
@@ -129,6 +139,8 @@ langsmith==0.15.1
     #   langchain-core
 mcp==1.30.0
     # via ocean-agent-api (pyproject.toml)
+openai==2.54.0
+    # via langchain-openai
 opentelemetry-api==1.45.2
     # via
     #   fastapi
@@ -189,6 +201,7 @@ pydantic==2.14.4
     #   langsmith
     #   mcp
     #   ocean-agent-api (pyproject.toml)
+    #   openai
     #   pydantic-settings
 pydantic-core==2.50.5
     # via pydantic
@@ -230,6 +243,8 @@ referencing==0.37.0
     # via
     #   jsonschema
     #   jsonschema-specifications
+regex==2026.11.19
+    # via tiktoken
 requests==2.34.2
     # via
     #   langchain
@@ -237,6 +252,7 @@ requests==2.34.2
     #   opentelemetry-exporter-http-transport
     #   opentelemetry-exporter-otlp-proto-http
     #   requests-toolbelt
+    #   tiktoken
 requests-toolbelt==1.0.0
     # via langsmith
 rpds-py==2026.9.1
@@ -247,6 +263,7 @@ sniffio==1.3.1
     # via
     #   groq
     #   langsmith
+    #   openai
 sortedcontainers==2.4.0
     # via fakeredis
 sqlalchemy==2.1.9
@@ -262,6 +279,10 @@ structlog==25.5.0
     # via ocean-agent-api (pyproject.toml)
 tenacity==9.2.1
     # via langchain-core
+tiktoken==0.14.0
+    # via langchain-openai
+tqdm==4.70.1
+    # via openai
 truststore==0.10.5
     # via
     #   httpcore2
@@ -275,6 +296,7 @@ typing-extensions==4.16.0
     #   langfuse
     #   langsmith
     #   mcp
+    #   openai
     #   opentelemetry-api
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
