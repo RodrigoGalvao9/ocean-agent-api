@@ -86,6 +86,7 @@ def mcp_tools_to_langchain(
     client: MCPClient,
     recorder: SourceRecorder | None = None,
     max_output_chars: int = DEFAULT_MAX_OUTPUT_CHARS,
+    rag_top_k: int = 5,
 ) -> list[StructuredTool]:
     logger = structlog.get_logger()
     adapters: list[StructuredTool] = []
@@ -99,6 +100,16 @@ def mcp_tools_to_langchain(
                 # Parâmetros opcionais que o modelo deixou nulos não vão ao servidor: lá valem
                 # os padrões da ferramenta.
                 arguments = {k: v for k, v in kwargs.items() if v is not None}
+                if tool_name == "search_maritime_knowledge":
+                    properties = input_schema.get("properties", {})
+                    for key in ("top_k", "limit", "k", "max_results"):
+                        if key in properties and key not in arguments:
+                            arguments[key] = rag_top_k
+                        if key in arguments:
+                            try:
+                                arguments[key] = min(max(int(arguments[key]), 1), rag_top_k)
+                            except (TypeError, ValueError):
+                                arguments[key] = rag_top_k
                 validate_tool_invocation(tool_name, arguments)
                 logger.info("mcp.tool_invoked", stage="mcp_tool_invoked", tool_name=tool_name)
 

@@ -42,6 +42,9 @@ Não registre valores reais ou credenciais no repositório.
 | `OPENROUTER_REFINER_ENABLED` | `true` | Usa o Lightning somente em perguntas ambíguas |
 | `OPENROUTER_REFINER_TIMEOUT_SECONDS` | `8` | Timeout curto do refinador |
 | `OPENROUTER_VALIDATOR_TIMEOUT_SECONDS` | `15` | Timeout do validador complexo |
+| `RAG_TOP_K` | `5` | Máximo de resultados de conhecimento enviados ao RAG |
+| `HISTORY_KEEP_MESSAGES` | `4` | Mensagens recentes mantidas sem resumo |
+| `HISTORY_SUMMARY_CHARS` | `600` | Limite do resumo determinístico do histórico |
 
 ## Redis e conversas
 

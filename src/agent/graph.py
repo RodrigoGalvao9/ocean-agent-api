@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from time import perf_counter
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.prebuilt import create_react_agent
@@ -16,6 +17,8 @@ from src.agent.refiner import (
     normalize_marine_terms,
     refine_question,
 )
+from src.agent.history import summarize_history
+from src.agent.usage import record_llm_usage
 from src.agent.reviewer import (
     deterministic_response_review,
     validate_complex_response,
@@ -32,6 +35,7 @@ from src.mcp.client import MCPClient
 from src.mcp.tools import mcp_tools_to_langchain
 from src.observability.metrics import (
     CHAT_OUTCOMES,
+    LLM_STAGE_LATENCY,
     QUESTION_ROUTES,
     RESPONSE_VALIDATIONS,
     SCOPE_DECISIONS,
@@ -87,6 +91,7 @@ class OceanAgent:
             self.mcp_client,
             recorder=recorder,
             max_output_chars=self.settings.max_tool_output_chars,
+            rag_top_k=self.settings.rag_top_k,
         )
 
     async def run(
@@ -98,12 +103,20 @@ class OceanAgent:
         llm = create_llm(self.settings)
         # Só as últimas mensagens vão ao LLM: controla custo e o efeito de históricos longos.
         history = list(history)[-self.settings.max_history_messages :]
+        history = summarize_history(
+            history,
+            keep_messages=self.settings.history_keep_messages,
+            max_summary_chars=self.settings.history_summary_chars,
+        )
         config = {"callbacks": get_callbacks()}
 
         # Camada 1: portão de escopo, antes de qualquer ferramenta ou resposta.
+        stage_started = perf_counter()
         decision = await classify_scope(
             llm, clean_message, history, config={**config, "run_name": "scope-gate"}
         )
+        LLM_STAGE_LATENCY.labels(stage="scope").observe(perf_counter() - stage_started)
+        record_llm_usage("scope", clean_message, str(decision.model_dump()))
         if decision.reason == "classifier_unavailable":
             SCOPE_DECISIONS.labels(decision="classifier_error").inc()
         else:
@@ -121,12 +134,15 @@ class OceanAgent:
         route = deterministic.route
         refiner = create_openrouter_refiner(self.settings)
         if refiner is not None and needs_llm_refinement(normalized_message, history):
+            stage_started = perf_counter()
             refined = await refine_question(
                 refiner,
                 clean_message,
                 history,
                 config={**config, "run_name": "question-refiner"},
             )
+            LLM_STAGE_LATENCY.labels(stage="refiner").observe(perf_counter() - stage_started)
+            record_llm_usage("refiner", clean_message, refined.model_dump_json())
             if refined.needs_clarification:
                 CHAT_OUTCOMES.labels(outcome="needs_clarification").inc()
                 question = refined.clarification_question or (
@@ -157,15 +173,22 @@ class OceanAgent:
         graph = create_react_agent(llm, tools=tools, prompt=build_system_prompt())
         self.logger.info("llm.execution_started", stage="llm_execution")
         messages = [*history, HumanMessage(content=refined_message)]
+        stage_started = perf_counter()
         result = await graph.ainvoke(
             {"messages": messages}, config={**config, "run_name": "ocean-agent"}
         )
+        LLM_STAGE_LATENCY.labels(stage="agent").observe(perf_counter() - stage_started)
 
         messages = result.get("messages", [])
         if messages:
             final = messages[-1]
             if isinstance(final, AIMessage):
                 text = str(final.content)
+                record_llm_usage(
+                    "agent",
+                    "".join(str(message.content) for message in messages),
+                    text,
+                )
                 rejected = False
 
                 deterministic_issues = deterministic_response_review(text)
@@ -179,12 +202,21 @@ class OceanAgent:
                 elif route == "complex":
                     validator = create_openrouter_validator(self.settings)
                     if validator is not None:
+                        stage_started = perf_counter()
                         review = await validate_complex_response(
                             validator,
                             refined_message,
                             text,
                             recorder.sources,
                             config={**config, "run_name": "response-validator"},
+                        )
+                        LLM_STAGE_LATENCY.labels(stage="validator").observe(
+                            perf_counter() - stage_started
+                        )
+                        record_llm_usage(
+                            "validator",
+                            refined_message + text,
+                            review.model_dump_json(),
                         )
                         if review.reason == "validador_indisponivel":
                             RESPONSE_VALIDATIONS.labels(result="unavailable").inc()

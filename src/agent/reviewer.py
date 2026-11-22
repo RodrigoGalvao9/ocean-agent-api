@@ -62,9 +62,9 @@ Retorne somente a estrutura solicitada."""
             "status": source.status,
             "freshness": source.freshness,
             "data_timestamp": source.data_timestamp,
-            "limitations": source.limitations,
+            "limitations": source.limitations[:2],
         }
-        for source in sources
+        for source in sources[:5]
     ]
     try:
         structured = llm.with_structured_output(ResponseReview)
@@ -73,8 +73,8 @@ Retorne somente a estrutura solicitada."""
                 SystemMessage(content=prompt),
                 HumanMessage(
                     content=(
-                        f"Pergunta:\n{question}\n\n"
-                        f"Resposta:\n{answer}\n\n"
+                        f"Pergunta:\n{question[:400]}\n\n"
+                        f"Resposta:\n{answer[:4000]}\n\n"
                         f"Fontes consultadas:\n{source_context}"
                     )
                 ),

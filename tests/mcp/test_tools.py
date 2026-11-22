@@ -122,3 +122,27 @@ async def test_output_is_capped_by_max_output_chars():
     )
     out = await _adapter(client, max_output_chars=1_000).ainvoke({"query": "q"})
     assert len(out) <= 1_200 and json.loads(out)["truncated"] is True
+
+
+async def test_rag_top_k_is_capped_by_configuration():
+    client = MagicMock()
+    client.invoke_tool = AsyncMock(
+        return_value={"status": "ok", "source": "RAG", "data": {"items": []}}
+    )
+    tool = {
+        "name": "search_maritime_knowledge",
+        "description": "Busca RAG",
+        "inputSchema": SCHEMA,
+    }
+    adapter = mcp_tools_to_langchain(
+        [tool],
+        client,
+        rag_top_k=5,
+    )[0]
+
+    await adapter.ainvoke({"query": "o que é preamar?", "k": 50})
+
+    client.invoke_tool.assert_awaited_with(
+        "search_maritime_knowledge",
+        {"query": "o que é preamar?", "k": 5},
+    )

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     openrouter_refiner_enabled: bool = True
     openrouter_refiner_timeout_seconds: float = 8.0
     openrouter_validator_timeout_seconds: float = 15.0
+    history_keep_messages: int = 4
+    history_summary_chars: int = 600
+    rag_top_k: int = 5
     mcp_server_url: str = "http://localhost:8001/mcp"
     mcp_auth_token: str = ""
     # Ferramentas do MCP que o chat público pode usar (separadas por vírgula). Todas são de
