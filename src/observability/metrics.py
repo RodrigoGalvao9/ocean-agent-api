@@ -21,12 +21,17 @@ SCOPE_DECISIONS = Counter(
 CHAT_OUTCOMES = Counter(
     "ocean_chat_outcomes_total",
     "Resultado final de cada pergunta",
-    ["outcome"],  # answered | refused_scope | refused_no_sources | needs_clarification | rejected_validation
+    ["outcome"],  # answered | refused_scope | refused_no_sources | needs_clarification | rejected_validation | needs_clarification | rejected_validation
 )
 QUESTION_ROUTES = Counter(
     "ocean_question_routes_total",
     "Rotas estruturadas escolhidas pelo refinador",
     ["route"],  # simple | live_data | knowledge | complex
+)
+RESPONSE_VALIDATIONS = Counter(
+    "ocean_response_validations_total",
+    "Resultado da validação LLM de respostas complexas",
+    ["result"],  # approved | rejected | unavailable | deterministic_rejected
 )
 MCP_CALLS = Counter(
     "ocean_mcp_calls_total",

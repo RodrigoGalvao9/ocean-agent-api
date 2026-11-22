@@ -11,18 +11,24 @@ from src.agent.prompts.system import (
     build_system_prompt,
 )
 from src.agent.refiner import refine_question
+from src.agent.reviewer import (
+    deterministic_response_review,
+    validate_complex_response,
+)
 from src.agent.scope import classify_scope
 from src.core.config import Settings
 from src.core.sources import SourceRecorder, SourceRef
 from src.llm.provider import (
     create_llm,
     create_openrouter_refiner,
+    create_openrouter_validator,
 )
 from src.mcp.client import MCPClient
 from src.mcp.tools import mcp_tools_to_langchain
 from src.observability.metrics import (
     CHAT_OUTCOMES,
     QUESTION_ROUTES,
+    RESPONSE_VALIDATIONS,
     SCOPE_DECISIONS,
 )
 from src.observability.tracing import get_callbacks, record_score
@@ -152,8 +158,46 @@ class OceanAgent:
         if messages:
             final = messages[-1]
             if isinstance(final, AIMessage):
+                text = str(final.content)
+                rejected = False
+
+                deterministic_issues = deterministic_response_review(text)
+                if deterministic_issues:
+                    RESPONSE_VALIDATIONS.labels(result="deterministic_rejected").inc()
+                    rejected = True
+                    text = (
+                        "Não consegui confirmar esta resposta com segurança com os dados "
+                        "disponíveis."
+                    )
+                elif route == "complex":
+                    validator = create_openrouter_validator(self.settings)
+                    if validator is not None:
+                        review = await validate_complex_response(
+                            validator,
+                            refined_message,
+                            text,
+                            recorder.sources,
+                            config={**config, "run_name": "response-validator"},
+                        )
+                        if review.reason == "validador_indisponivel":
+                            RESPONSE_VALIDATIONS.labels(result="unavailable").inc()
+                        elif review.approved:
+                            RESPONSE_VALIDATIONS.labels(result="approved").inc()
+                        else:
+                            RESPONSE_VALIDATIONS.labels(result="rejected").inc()
+                            if review.corrected_answer.strip():
+                                text = review.corrected_answer.strip()
+                            else:
+                                rejected = True
+                                text = (
+                                    "Não consegui confirmar esta resposta com segurança "
+                                    "com os dados disponíveis."
+                                )
+
                 # A atribuição exigida pelas licenças das fontes é anexada pelo código.
-                CHAT_OUTCOMES.labels(outcome="answered").inc()
-                text = str(final.content) + recorder.attribution_footer()
+                text = text + recorder.attribution_footer()
+                CHAT_OUTCOMES.labels(
+                    outcome="rejected_validation" if rejected else "answered"
+                ).inc()
                 return AgentResult(text, recorder.sources)
         raise RuntimeError("agent did not produce a response")

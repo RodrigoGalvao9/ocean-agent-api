@@ -62,6 +62,69 @@ async def test_ambiguous_question_requests_clarification_before_mcp():
     client.list_tools.assert_not_awaited()
 
 
+async def test_complex_answer_is_rejected_by_deterministic_review():
+    tools = [
+        {
+            "name": "get_marine_conditions",
+            "description": "Condições do mar",
+            "inputSchema": {"properties": {"place": {"type": "string"}}, "required": ["place"]},
+        }
+    ]
+    mcp = _mcp(tools)
+    mcp.invoke_tool = AsyncMock(
+        return_value={
+            "status": "ok",
+            "source": "Open-Meteo Marine",
+            "retrieved_at": "2026-11-22T12:00:00Z",
+            "data": {"wave_height_m": 1.2},
+        }
+    )
+    agent = OceanAgent(
+        _settings().model_copy(update={"allowed_tools": "get_marine_conditions"}),
+        mcp,
+    )
+
+    class FakeGraph:
+        def __init__(self, tools):
+            self.tools = tools
+
+        async def ainvoke(self, inputs, config=None):
+            await self.tools[0].ainvoke({"place": "Recife"})
+            return {
+                "messages": [
+                    AIMessage(content="É seguro sair hoje. Ondas de 1,2 m.")
+                ]
+            }
+
+    with patch("src.agent.graph.create_llm"), patch(
+        "src.agent.graph.create_openrouter_refiner",
+        return_value=MagicMock(),
+    ), patch(
+        "src.agent.graph.refine_question",
+        AsyncMock(
+            return_value=RefinedQuestion(
+                intent="marine_conditions",
+                route="complex",
+                location="Recife",
+                refined_query="Compare as condições do mar em Recife.",
+            )
+        ),
+    ), patch(
+        "src.agent.graph.classify_scope",
+        AsyncMock(return_value=ScopeDecision(in_scope=True)),
+    ), patch(
+        "src.agent.graph.create_react_agent",
+        side_effect=lambda llm, tools, prompt: FakeGraph(tools),
+    ), patch(
+        "src.agent.graph.create_openrouter_validator",
+        return_value=MagicMock(),
+    ):
+        result = await agent.run("posso sair com segurança hoje?")
+
+    assert "Não consegui confirmar esta resposta" in result.text
+    assert [s.name for s in result.sources] == ["Open-Meteo Marine"]
+
+
 async def test_no_allowed_tools_means_no_answer_from_memory():
     tools = [{"name": "set_speed", "description": "x", "inputSchema": {}}]
     agent = OceanAgent(_settings(), _mcp(tools))
