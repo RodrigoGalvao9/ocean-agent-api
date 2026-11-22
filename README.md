@@ -2,9 +2,30 @@
 
 Ocean Agent API é uma API HTTP construída com FastAPI para orquestrar agentes de IA especializados no domínio marítimo brasileiro. O projeto utiliza LangGraph para executar o agente, Groq para inferência dos modelos, Langfuse para rastreamento opcional e o MCP Python SDK para descobrir e executar ferramentas em um servidor MCP remoto.
 
-O sistema foi projetado para manter os dados marítimos fora deste repositório. Por essa razão, a API consulta ferramentas fornecidas pelo servidor MCP independemente hospedado em vez de se conectar diretamente a bancos vetoriais, provedores de embeddings ou serviços de coleta.
+O sistema foi projetado para manter os dados marítimos fora deste repositório. Por essa razão, a API consulta ferramentas fornecidas pelo servidor MCP independentemente hospedado em vez de se conectar diretamente a bancos vetoriais, provedores de embeddings ou serviços de coleta.
 
-## Responsabilidades do projeto
+## Ecossistema Ocean
+
+Este repositório é a camada de API e orquestração do sistema. Os componentes são mantidos em repositórios separados:
+
+| Componente | Repositório | Responsabilidade |
+|---|---|---|
+| API e agente | [`ocean-agent-api`](https://github.com/RodrigoGalvao9/ocean-agent-api) | Expõe a API HTTP, gerencia conversas, aplica segurança e limites, executa o agente LangGraph e consulta o MCP |
+| Dados e servidor MCP | [`Ocean-MCP-Ingestor`](https://github.com/RodrigoGalvao9/Ocean-MCP-Ingestor) | Coleta e normaliza dados marítimos, executa as migrations, mantém PostgreSQL/Qdrant/Redis e disponibiliza as ferramentas MCP somente leitura |
+| Interface web | [`ocean-frontend`](https://github.com/RodrigoGalvao9/ocean-frontend) | Oferece a interface de chat em React/TypeScript e consome os endpoints públicos desta API |
+
+O fluxo principal é:
+
+```text
+ocean-frontend -> ocean-agent-api -> Ocean-MCP-Ingestor
+                                      ├── PostgreSQL
+                                      ├── Qdrant
+                                      └── Redis
+```
+
+O [`Ocean-MCP-Ingestor`](https://github.com/RodrigoGalvao9/Ocean-MCP-Ingestor) é a outra parte do backend: ele é o dono das fontes marítimas, da ingestão, do esquema de dados, da busca vetorial, do cache e do servidor MCP. Esta API não deve receber credenciais de Qdrant, Cloudflare, embeddings ou bancos usados pelo ingestor.
+
+## Responsabilidades deste projeto
 
 Este repositório contém:
 
@@ -22,7 +43,7 @@ Este repositório contém:
 - testes automatizados executados no GitHub Actions;
 - configuração de Redis, Prometheus e Grafana para desenvolvimento local.
 
-O projeto não contém modelos de recuperação vetorial, configuração do Qdrant ou credenciais de embedding.
+O projeto não contém modelos de recuperação vetorial, configuração do Qdrant ou credenciais de embedding. Esses recursos pertencem ao [`Ocean-MCP-Ingestor`](https://github.com/RodrigoGalvao9/Ocean-MCP-Ingestor).
 
 ## Dependências externas
 
@@ -176,6 +197,24 @@ docker compose --profile api up -d
 ```
 
 Neste modo, o Compose utiliza `redis://redis:6379/0` para Redis e `http://host.docker.internal:8001/mcp` como URL padrão do MCP quando a API roda em um container.
+
+## Integração com o frontend
+
+O [`ocean-frontend`](https://github.com/RodrigoGalvao9/ocean-frontend) é a interface web oficial do projeto. Ele usa React, TypeScript e Vite e consome os endpoints de chat e conversas desta API.
+
+Para executar o frontend localmente, configure `VITE_API_URL` no repositório do frontend:
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+No ambiente da API, inclua a origem do frontend em `CORS_ORIGINS`. Para o desenvolvimento local:
+
+```env
+CORS_ORIGINS=http://localhost:5173
+```
+
+Em produção, substitua esse valor pelo domínio exato publicado pelo frontend. Os valores `VITE_` são públicos no navegador; nenhuma chave de API ou segredo deve ser configurado no frontend.
 
 ## Endpoints da API
 
