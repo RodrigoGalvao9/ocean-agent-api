@@ -4,12 +4,17 @@ from langchain_core.messages import AIMessage
 
 from src.agent.graph import OceanAgent
 from src.agent.prompts.system import REFUSAL_NO_SOURCES, REFUSAL_OUT_OF_SCOPE
+from src.agent.refiner import RefinedQuestion
 from src.agent.scope import ScopeDecision
 from src.core.config import Settings
 
 
 def _settings() -> Settings:
-    return Settings(groq_api_key="test", allowed_tools="search_maritime_knowledge")
+    return Settings(
+        groq_api_key="test",
+        openrouter_api_key="",
+        allowed_tools="search_maritime_knowledge",
+    )
 
 
 def _mcp(tools):
@@ -27,6 +32,32 @@ async def test_out_of_scope_is_refused_without_touching_mcp():
     ):
         result = await agent.run("me dá uma receita de bolo")
     assert result.text == REFUSAL_OUT_OF_SCOPE
+    assert result.sources == []
+    client.list_tools.assert_not_awaited()
+
+
+async def test_ambiguous_question_requests_clarification_before_mcp():
+    client = _mcp([])
+    agent = OceanAgent(_settings(), client)
+    with patch("src.agent.graph.create_llm"), patch(
+        "src.agent.graph.create_openrouter_refiner",
+        return_value=MagicMock(),
+    ), patch(
+        "src.agent.graph.refine_question",
+        AsyncMock(
+            return_value=RefinedQuestion(
+                intent="marine_conditions",
+                refined_query="",
+                needs_clarification=True,
+                clarification_question="Em qual local você quer consultar as condições do mar?",
+            )
+        ),
+    ), patch(
+        "src.agent.graph.classify_scope",
+        AsyncMock(return_value=ScopeDecision(in_scope=True)),
+    ):
+        result = await agent.run("como está o mar?")
+    assert result.text == "Em qual local você quer consultar as condições do mar?"
     assert result.sources == []
     client.list_tools.assert_not_awaited()
 

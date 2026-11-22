@@ -10,13 +10,21 @@ from src.agent.prompts.system import (
     REFUSAL_OUT_OF_SCOPE,
     build_system_prompt,
 )
+from src.agent.refiner import refine_question
 from src.agent.scope import classify_scope
 from src.core.config import Settings
 from src.core.sources import SourceRecorder, SourceRef
-from src.llm.provider import create_llm
+from src.llm.provider import (
+    create_llm,
+    create_openrouter_refiner,
+)
 from src.mcp.client import MCPClient
 from src.mcp.tools import mcp_tools_to_langchain
-from src.observability.metrics import CHAT_OUTCOMES, SCOPE_DECISIONS
+from src.observability.metrics import (
+    CHAT_OUTCOMES,
+    QUESTION_ROUTES,
+    SCOPE_DECISIONS,
+)
 from src.observability.tracing import get_callbacks, record_score
 from src.security.guardrails import validate_user_message
 
@@ -95,6 +103,36 @@ class OceanAgent:
             CHAT_OUTCOMES.labels(outcome="refused_scope").inc()
             return AgentResult(REFUSAL_OUT_OF_SCOPE)
 
+        # Camada opcional: refinador estruturado via OpenRouter.
+        refined_message = clean_message
+        route = "live_data"
+        refiner = create_openrouter_refiner(self.settings)
+        if refiner is not None:
+            refined = await refine_question(
+                refiner,
+                clean_message,
+                history,
+                config={**config, "run_name": "question-refiner"},
+            )
+            if refined.needs_clarification:
+                CHAT_OUTCOMES.labels(outcome="needs_clarification").inc()
+                question = refined.clarification_question or (
+                    "Você pode informar o local ou a data que deseja consultar?"
+                )
+                return AgentResult(question)
+            refined_message = refined.refined_query
+            route = refined.route
+            self.logger.info(
+                "question.refined",
+                stage="question_refiner",
+                intent=refined.intent,
+                route=route,
+                location=refined.location,
+                date=refined.date,
+                metric=refined.metric,
+            )
+        QUESTION_ROUTES.labels(route=route).inc()
+
         # Camada 2: só ferramentas permitidas. Sem fontes, não responde de memória.
         recorder = SourceRecorder()
         tools = await self._load_allowed_tools(recorder)
@@ -105,7 +143,7 @@ class OceanAgent:
         # Camada 3: prompt restritivo com regra de fundamentação (e a data de hoje).
         graph = create_react_agent(llm, tools=tools, prompt=build_system_prompt())
         self.logger.info("llm.execution_started", stage="llm_execution")
-        messages = [*history, HumanMessage(content=clean_message)]
+        messages = [*history, HumanMessage(content=refined_message)]
         result = await graph.ainvoke(
             {"messages": messages}, config={**config, "run_name": "ocean-agent"}
         )
@@ -114,8 +152,8 @@ class OceanAgent:
         if messages:
             final = messages[-1]
             if isinstance(final, AIMessage):
-                CHAT_OUTCOMES.labels(outcome="answered").inc()
                 # A atribuição exigida pelas licenças das fontes é anexada pelo código.
+                CHAT_OUTCOMES.labels(outcome="answered").inc()
                 text = str(final.content) + recorder.attribution_footer()
                 return AgentResult(text, recorder.sources)
         raise RuntimeError("agent did not produce a response")
