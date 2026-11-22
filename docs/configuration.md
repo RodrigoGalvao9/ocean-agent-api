@@ -35,7 +35,7 @@ Não registre valores reais ou credenciais no repositório.
 | `TRUSTED_PROXY_HOPS` | `1` | Quantidade de proxies confiáveis |
 | `GROQ_API_KEY` | vazio | Chave do modelo principal Groq |
 | `GROQ_MODEL` | `openai/gpt-oss-120b` | Modelo principal |
-| `OPENROUTER_API_KEY` | vazio | Chave opcional do refinador OpenRouter |
+| `OPENROUTER_API_KEY` | vazio | Chave compartilhada do refinador e Validador OpenRouter |
 | `OPENROUTER_REFINER_MODEL` | `nvidia/nemotron-3.5-lightning:free` | Modelo usado para estruturar a pergunta |
 | `OPENROUTER_VALIDATOR_MODEL` | `nvidia/nemotron-3-ultra:free` | Modelo usado para revisar consultas complexas |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Endpoint compatível da OpenRouter |

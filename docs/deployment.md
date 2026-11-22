@@ -38,4 +38,7 @@ Em produção:
 - `OPENROUTER_VALIDATOR_MODEL` define o modelo usado para revisar consultas complexas.
 - `OPENROUTER_REFINER_ENABLED=false` desliga chamadas externas ao refinador;
 - `OPENROUTER_REFINER_TIMEOUT_SECONDS` deve permanecer baixo para evitar esperas longas.
+- `OPENROUTER_VALIDATOR_TIMEOUT_SECONDS` limita o Validador de consultas complexas.
 - `RAG_TOP_K` limita o número máximo de trechos pedido ao MCP de conhecimento.
+- `HISTORY_KEEP_MESSAGES` mantém somente as mensagens recentes sem resumo.
+- `HISTORY_SUMMARY_CHARS` limita o resumo determinístico do histórico.
