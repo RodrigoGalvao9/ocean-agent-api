@@ -1,569 +1,77 @@
 # Ocean Agent API
 
-Ocean Agent API é uma API HTTP construída com FastAPI para orquestrar agentes de IA especializados no domínio marítimo brasileiro. O projeto utiliza LangGraph para executar o agente, Groq para inferência dos modelos, Langfuse para rastreamento opcional e o MCP Python SDK para descobrir e executar ferramentas em um servidor MCP remoto.
+API HTTP FastAPI que orquestra o agente marítimo brasileiro, gerencia conversas e consulta ferramentas MCP somente leitura.
 
-O sistema foi projetado para manter os dados marítimos fora deste repositório. Por essa razão, a API consulta ferramentas fornecidas pelo servidor MCP independentemente hospedado em vez de se conectar diretamente a bancos vetoriais, provedores de embeddings ou serviços de coleta.
+O projeto usa FastAPI, LangGraph, Groq, MCP Streamable HTTP e observabilidade opcional com Langfuse, Prometheus e Grafana.
 
-## Ecossistema Ocean
+## Ecossistema
 
-Este repositório é a camada de API e orquestração do sistema. Os componentes são mantidos em repositórios separados:
-
-| Componente | Repositório | Responsabilidade |
-|---|---|---|
-| API e agente | [`ocean-agent-api`](https://github.com/RodrigoGalvao9/ocean-agent-api) | Expõe a API HTTP, gerencia conversas, aplica segurança e limites, executa o agente LangGraph e consulta o MCP |
-| Dados e servidor MCP | [`Ocean-MCP-Ingestor`](https://github.com/RodrigoGalvao9/Ocean-MCP-Ingestor) | Coleta e normaliza dados marítimos, executa as migrations, mantém PostgreSQL/Qdrant/Redis e disponibiliza as ferramentas MCP somente leitura |
-| Interface web | [`ocean-frontend`](https://github.com/RodrigoGalvao9/ocean-frontend) | Oferece a interface de chat em React/TypeScript e consome os endpoints públicos desta API |
-
-O fluxo principal é:
+| Repositório | Responsabilidade |
+|---|---|
+| [`ocean-agent-api`](https://github.com/RodrigoGalvao9/ocean-agent-api) | API, agente, conversas, segurança e observabilidade |
+| [`Ocean-MCP-Ingestor`](https://github.com/RodrigoGalvao9/Ocean-MCP-Ingestor) | Fontes marítimas, ingestão, PostgreSQL, Qdrant, Redis e ferramentas MCP |
+| [`ocean-frontend`](https://github.com/RodrigoGalvao9/ocean-frontend) | Interface web React/TypeScript |
 
 ```text
-ocean-frontend -> ocean-agent-api -> Ocean-MCP-Ingestor
-                                      ├── PostgreSQL
-                                      ├── Qdrant
-                                      └── Redis
+frontend -> Agent API -> servidor MCP
+                           ├── PostgreSQL
+                           ├── Qdrant
+                           └── Redis
 ```
 
-O [`Ocean-MCP-Ingestor`](https://github.com/RodrigoGalvao9/Ocean-MCP-Ingestor) é a outra parte do backend: ele é o dono das fontes marítimas, da ingestão, do esquema de dados, da busca vetorial, do cache e do servidor MCP. Esta API não deve receber credenciais de Qdrant, Cloudflare, embeddings ou bancos usados pelo ingestor.
+## Início rápido
 
-## Responsabilidades deste projeto
-
-Este repositório contém:
-
-- endpoints HTTP com FastAPI;
-- classificação de escopo das mensagens;
-- regras de segurança para ferramentas e mensagens;
-- execução de agentes com LangGraph;
-- histórico de conversas em memória;
-- isolamento básico das conversas por cliente;
-- limites de requisições com Redis opcional;
-- integração com o servidor MCP;
-- métricas Prometheus;
-- rastreamento opcional no Langfuse;
-- worker ARQ para coletas periódicas em segundo plano;
-- testes automatizados executados no GitHub Actions;
-- configuração de Redis, Prometheus e Grafana para desenvolvimento local.
-
-O projeto não contém modelos de recuperação vetorial, configuração do Qdrant ou credenciais de embedding. Esses recursos pertencem ao [`Ocean-MCP-Ingestor`](https://github.com/RodrigoGalvao9/Ocean-MCP-Ingestor).
-
-## Dependências externas
-
-### Obrigatórias para o chat
-
-- Python 3.12 ou superior;
-- chave da API Groq;
-- URL de um servidor MCP compatível com Streamable HTTP.
-
-### Opcionais
-
-- Redis, para compartilhar contadores de limite entre instâncias;
-- credenciais Langfuse, para rastreamento das execuções;
-- Prometheus, para coleta de métricas;
-- Grafana, para visualização das métricas;
-- Docker e Docker Compose, para executar a infraestrutura local.
-
-## Configuração do ambiente
-
-### Ambiente local
-
-Crie um ambiente virtual e instale o projeto com as dependências de execução e teste:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[test]"
-cp .env.example .env
-```
-
-No Windows, a ativação do ambiente virtual pode ser feita com:
+Python 3.12 ou superior, chave Groq e URL de um servidor MCP são necessários para o chat.
 
 ```powershell
 .venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e ".[test]"
 Copy-Item .env.example .env
+python -m pip install -e ".[test]"
+python -m uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Preencha o arquivo `.env` antes de iniciar a API. Em particular, `GROQ_API_KEY` e `MCP_SERVER_URL` são necessários para executar o chat. Fora de `development`, `MCP_SERVER_URL` deve usar HTTPS, `MCP_AUTH_TOKEN` é obrigatório e `CONVERSATION_SESSION_SECRET` deve ser um segredo aleatório forte.
+Endpoints principais:
 
-O arquivo `.env.example` contém os nomes e os valores padrão de todas as opções reconhecidas pelo projeto. Valores reais ou secretos não devem ser registrados no repositório.
+- `GET /health`
+- `POST /api/v1/chat`
+- `GET /api/v1/conversations`
+- `GET /api/v1/conversations/{conversation_id}`
+- `DELETE /api/v1/conversations/{conversation_id}`
 
-### Variáveis principais
-
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `API_HOST` | `0.0.0.0` | Interface usada pelo processo da API |
-| `API_PORT` | `8000` | Porta usada pelo processo da API |
-| `GROQ_API_KEY` | vazio | Chave da API Groq |
-| `GROQ_MODEL` | `openai/gpt-oss-120b` | Modelo usado pelo agente |
-| `MCP_SERVER_URL` | `http://localhost:8001/mcp` | URL do endpoint MCP |
-| `MCP_AUTH_TOKEN` | vazio | Token bearer enviado ao servidor MCP |
-| `ALLOWED_TOOLS` | `search_maritime_knowledge,list_knowledge_topics,get_marine_conditions,get_tide_table,get_fishing_closures,search_vessels,find_fish_markets` | Ferramentas MCP permitidas (somente leitura). Nomes que o servidor ainda não expõe são ignorados |
-| `REQUEST_TIMEOUT_SECONDS` | `30` | Timeout das operações MCP quando o servidor respondeu recentemente |
-| `MCP_COLD_START_TIMEOUT_SECONDS` | `60` | Timeout quando o MCP pode estar dormindo (plano gratuito do Render) |
-| `MCP_WARM_WINDOW_SECONDS` | `600` | Por quanto tempo, após uma resposta, o MCP é considerado acordado |
-| `MCP_TOOLS_CACHE_TTL_SECONDS` | `300` | Por quanto tempo a lista de ferramentas é reaproveitada |
-| `MAX_TOOL_OUTPUT_CHARS` | `12000` | Limite do texto de cada ferramenta enviado ao modelo |
-| `CONVERSATION_SESSION_SECRET` | vazio em development | Segredo usado para assinar o cookie HttpOnly de ownership das conversas; obrigatório fora de development |
-| `LOG_LEVEL` | `INFO` | Nível dos logs estruturados |
-| `ENVIRONMENT` | `development` | Ambiente de execução |
-
-### CORS e proxies
-
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `CORS_ORIGINS` | `http://localhost:5173` | Origens CORS separadas por vírgulas |
-| `TRUSTED_PROXY_HOPS` | `1` | Quantidade de proxies confiáveis à frente da aplicação |
-
-`TRUSTED_PROXY_HOPS` controla a leitura do cabeçalho `X-Forwarded-For`. Em plataformas como o Render, o valor normalmente utilizado é `1`. Em execução direta sem proxy confiável, o valor recomendado é `0`.
-
-### Limites e Redis
-
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `REDIS_URL` | vazio | URL Redis; vazio ativa somente o limite em memória |
-| `RATE_LIMIT_ENABLED` | `true` | Ativa ou desativa os limites |
-| `RATE_LIMIT_CHAT_PER_MINUTE` | `8` | Máximo de chamadas de chat por IP por minuto |
-| `RATE_LIMIT_CHAT_PER_DAY` | `100` | Máximo de chamadas de chat por IP por dia |
-| `RATE_LIMIT_GLOBAL_PER_MINUTE` | `60` | Máximo global de chamadas de chat por minuto |
-| `RATE_LIMIT_READ_PER_MINUTE` | `60` | Máximo de operações de leitura por IP por minuto |
-| `MAX_REQUEST_BODY_BYTES` | `16384` | Tamanho máximo do corpo HTTP |
-| `MAX_HISTORY_MESSAGES` | `12` | Histórico mais recente enviado ao modelo |
-| `MAX_MESSAGES_PER_CONVERSATION` | `60` | Máximo de mensagens por conversa |
-| `MAX_CONVERSATIONS` | `1000` | Máximo de conversas mantidas em memória |
-
-Sem `REDIS_URL`, os contadores são mantidos somente na instância local e são reiniciados a cada processo ou deploy. Com Redis configurado, os contadores podem ser compartilhados entre instâncias. Quando o Redis falha, o limite continua funcionando temporariamente em memória.
-
-### Langfuse
-
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `LANGFUSE_PUBLIC_KEY` | vazio | Chave pública Langfuse |
-| `LANGFUSE_SECRET_KEY` | vazio | Chave secreta Langfuse |
-| `LANGFUSE_HOST` | `https://cloud.langfuse.com` | Endpoint Langfuse |
-| `LANGFUSE_SAMPLE_RATE` | `1.0` | Taxa de amostragem |
-| `LANGFUSE_CAPTURE_CONTENT` | `false` | Permite enviar prompts, respostas e chamadas ao Langfuse; mantenha desativado por padrão |
-
-O rastreamento fica desativado quando as duas chaves Langfuse estão vazias. Mesmo habilitado, o conteúdo de prompts e respostas não é enviado por padrão; `LANGFUSE_CAPTURE_CONTENT=true` deve ser usado somente quando isso for aceitável para o ambiente e a política de retenção.
-
-### Métricas
-
-| Variável | Padrão | Descrição |
-|---|---|---|
-| `METRICS_TOKEN` | vazio | Token bearer exigido pelo endpoint `/metrics` em produção |
-
-Em ambiente de desenvolvimento, o endpoint `/metrics` pode ser acessado diretamente. Em produção, `ENVIRONMENT=production` exige `METRICS_TOKEN` e o cabeçalho:
-
-```text
-Authorization: Bearer <METRICS_TOKEN>
-```
-
-## Inicialização da API
-
-### Execução direta
+Exemplo:
 
 ```bash
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+curl -c cookies.txt -b cookies.txt \
+  -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Como está o mar em Recife agora?"}'
 ```
 
-Após a inicialização, os principais endpoints são:
-
-- `GET http://localhost:8000/health`;
-- `POST http://localhost:8000/api/v1/chat`;
-- `GET http://localhost:8000/api/v1/conversations`;
-- `GET http://localhost:8000/api/v1/conversations/{conversation_id}`;
-- `DELETE http://localhost:8000/api/v1/conversations/{conversation_id}`;
-- `GET http://localhost:8000/metrics`.
-
-O endpoint `/health` não consulta Groq ou MCP.
-
-### Execução com Docker
-
-O Dockerfile utiliza Python 3.12 e inicia o Uvicorn na porta definida pela variável `PORT`:
-
-```bash
-docker build -t ocean-agent-api .
-docker run --env-file .env -p 8000:8000 ocean-agent-api
-```
-
-O Docker Compose disponibiliza Redis, worker, Redis Insight, Prometheus e Grafana:
-
-```bash
-docker compose up -d
-```
-
-A API pode ser iniciada em container, junto com a infraestrutura, com:
-
-```bash
-docker compose --profile api up -d
-```
-
-Neste modo, o Compose utiliza `redis://redis:6379/0` para Redis e `http://host.docker.internal:8001/mcp` como URL padrão do MCP quando a API roda em um container.
-
-## Integração com o frontend
-
-O [`ocean-frontend`](https://github.com/RodrigoGalvao9/ocean-frontend) é a interface web oficial do projeto. Ele usa React, TypeScript e Vite e consome os endpoints de chat e conversas desta API.
-
-Para executar o frontend localmente, configure `VITE_API_URL` no repositório do frontend:
-
-```env
-VITE_API_URL=http://localhost:8000
-```
-
-No ambiente da API, inclua a origem do frontend em `CORS_ORIGINS`. Para o desenvolvimento local:
-
-```env
-CORS_ORIGINS=http://localhost:5173
-```
-
-Em produção, substitua esse valor pelo domínio exato publicado pelo frontend. Os valores `VITE_` são públicos no navegador; nenhuma chave de API ou segredo deve ser configurado no frontend.
-
-## Endpoints da API
-
-### Verificação de integridade
-
-```bash
-curl http://localhost:8000/health
-```
-
-Resposta esperada:
-
-```json
-{
-  "status": "ok",
-  "service": "ocean-agent-api"
-}
-```
-
-### Envio de mensagem
-
-```bash
-curl -c cookies.txt -b cookies.txt -X POST http://localhost:8000/api/v1/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"Quais são as condições marítimas de Santos?"}'
-```
-
-Uma chamada sem `conversation_id` cria uma nova conversa. Para continuar uma conversa existente, reutilize o `conversation_id` retornado pela resposta:
-
-```bash
-curl -c cookies.txt -b cookies.txt -X POST http://localhost:8000/api/v1/chat \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "message":"E amanhã?",
-    "conversation_id":"CONVERSATION_ID"
-  }'
-```
-
-A resposta inclui o texto, o identificador da conversa e as **fontes consultadas**:
-
-```json
-{
-  "conversation_id": "...",
-  "response": "A baixa-mar prevista em Santos amanhã é às 06h12...",
-  "request_id": "...",
-  "duration_ms": 4210.5,
-  "sources": [
-    {
-      "tool": "get_tide_table",
-      "name": "Tábuas de Marés 2026, Marinha do Brasil",
-      "url": "https://www.marinha.mil.br/chm/tabuas-de-mare",
-      "retrieved_at": "2026-11-21T12:00:00Z",
-      "data_timestamp": "2026-11-22T00:00:00Z",
-      "status": "ok",
-      "freshness": "reference",
-      "attribution": null,
-      "license": null,
-      "limitations": ["Previsão astronômica; não inclui efeitos do tempo."]
-    }
-  ]
-}
-```
-
-`sources` vem vazio quando nenhuma ferramenta foi usada (recusas, por exemplo). As fontes também ficam em `metadata.sources` de cada mensagem do assistente nas rotas de conversa. Quando uma fonte exige crédito (Open-Meteo, Global Fishing Watch), a atribuição é anexada ao final do texto pelo código, no formato `Atribuição: ...`.
-
-O backend emite o cookie `ocean_session`, `HttpOnly` e assinado, para identificar o proprietário das conversas. O cabeçalho legado `X-Client-Id` é ignorado para ownership. Clientes web cross-origin, como o [`ocean-frontend`](https://github.com/RodrigoGalvao9/ocean-frontend), devem enviar as requisições com `credentials: "include"`.
-
-### Listagem de conversas
-
-```bash
-curl -b cookies.txt \
-  http://localhost:8000/api/v1/conversations
-```
-
-### Consulta de uma conversa
-
-```bash
-curl -b cookies.txt \
-  http://localhost:8000/api/v1/conversations/CONVERSATION_ID
-```
-
-### Exclusão de uma conversa
-
-```bash
-curl -X DELETE \
-  -b cookies.txt \
-  http://localhost:8000/api/v1/conversations/CONVERSATION_ID
-```
-
-Um identificador pertencente a outro proprietário retorna `404`. A API não inclui o proprietário interno nas respostas.
-
-## Proteção da API
-
-As proteções atuais incluem:
-
-- limite por IP por minuto;
-- limite por IP por dia;
-- limite global por minuto;
-- limite de operações de leitura por IP;
-- limite do tamanho do corpo da requisição;
-- limite de mensagens por conversa;
-- limite de conversas mantidas em memória;
-- limite do histórico enviado ao modelo;
-- isolamento de conversas por proprietário;
-- validação dos nomes e argumentos das ferramentas MCP;
-- lista explícita de ferramentas permitidas;
-- identificador único por requisição;
-- CORS limitado pelas origens configuradas.
-
-Quando um limite é excedido, a API retorna `429 Too Many Requests` e pode incluir:
-
-- `Retry-After`;
-- `X-RateLimit-Limit`;
-- `X-RateLimit-Remaining`.
-
-O CORS permite somente os valores definidos em `CORS_ORIGINS`.
-
-## Fluxo de execução do agente
-
-Uma requisição de chat passa pelas seguintes etapas:
-
-1. A mensagem é validada e sanitizada.
-2. O proprietário da conversa é identificado.
-3. Os limites de requisição são aplicados.
-4. A conversa existente é localizada ou uma nova conversa é criada.
-5. A mensagem é classificada quanto ao escopo marítimo.
-6. Quando a mensagem está fora de escopo, o agente responde sem consultar ferramentas.
-7. Quando está dentro do escopo, o servidor MCP é consultado (a lista de ferramentas fica em cache por alguns minutos).
-8. Somente as ferramentas listadas em `ALLOWED_TOOLS` podem ser utilizadas.
-9. O LangGraph executa o agente com o histórico recente permitido e a data de hoje (horário de Brasília) no prompt.
-10. Cada chamada de ferramenta devolve o contrato de proveniência do MCP (fonte, datas, status, limitações); falha de uma ferramenta vira uma resposta "indisponível" para o modelo explicar, e não um erro da API.
-11. A resposta, com as fontes e a atribuição exigida pelas licenças, é armazenada no histórico da conversa.
-
-As ferramentas MCP e os documentos recuperados são considerados dados não confiáveis. O agente é instruído a responder somente a partir dos resultados das ferramentas e não deve recriar conhecimento diretamente no modelo.
-
-## Worker em segundo plano
-
-O worker utiliza ARQ sobre Redis para executar coletas programadas e armazenar resultados no cache Redis.
-
-Arquivos principais:
-
-- `src/worker/settings.py`: configuração do worker e agendamentos;
-- `src/worker/collectors.py`: registro dos coletores;
-- `src/worker/cache.py`: leitura e escrita do cache;
-- `tests/worker/test_worker.py`: testes do cache e da execução dos coletores.
-
-O worker executa `heartbeat` a cada minuto e `run_collectors` às horas 00, 15, 30 e 45 minutos. A falha de um coletor não impede a execução dos demais.
-
-Execução direta:
-
-```bash
-python -m arq src.worker.settings.WorkerSettings
-```
-
-Verificação de saúde:
-
-```bash
-python -m arq src.worker.settings.WorkerSettings --check
-```
-
-Execução em Docker:
-
-```bash
-docker compose up -d redis worker
-docker compose logs --tail 100 worker
-```
-
-Atualmente, `COLLECTORS` não possui coletores registrados. Os primeiros coletores devem ser adicionados em `src/worker/collectors.py` e testados antes do uso em produção.
-
-Os dados coletados são armazenados com TTL no Redis usando a chave:
-
-```text
-ocean:src:<nome_do_coletor>
-```
-
-A chave `ocean:worker:heartbeat` registra o último funcionamento conhecido do worker.
-
-## Observabilidade
-
-### Logs
-
-Os logs são emitidos em formato estruturado por meio de `structlog`. O nível é configurado por `LOG_LEVEL`.
-
-### Métricas Prometheus
-
-As métricas públicas incluem:
-
-- `ocean_http_requests_total`;
-- `ocean_http_request_duration_seconds`;
-- `ocean_scope_decisions_total`;
-- `ocean_chat_outcomes_total`;
-- `ocean_mcp_calls_total`;
-- `ocean_mcp_call_duration_seconds`;
-- `ocean_mcp_tool_calls_total` (por ferramenta e status);
-- `ocean_mcp_tool_duration_seconds` (por ferramenta);
-- `ocean_rate_limit_rejections_total`;
-- `ocean_redis_errors_total`.
-
-Com Docker Compose, o Prometheus está disponível em `http://localhost:9090`. A configuração de coleta está em `monitoring/prometheus.yml`.
-
-Quando `METRICS_TOKEN` estiver definido em produção, o Prometheus precisa usar autenticação bearer. A configuração de autenticação pode ser criada em `monitoring/metrics_token` e incluída no serviço Prometheus conforme o comentário existente em `monitoring/prometheus.yml`.
-
-### Grafana
-
-Com Docker Compose, o Grafana está disponível em `http://localhost:3000`.
-
-Credenciais padrão:
-
-- usuário: `admin`;
-- senha: `admin`.
-
-A senha pode ser substituída pela variável `GRAFANA_ADMIN_PASSWORD` no ambiente utilizado pelo Docker Compose.
-
-O projeto provisiona automaticamente:
-
-- fonte de dados Prometheus;
-- dashboard `Ocean — visão geral`;
-- renovação de dados a cada 30 segundos.
-
-Arquivos de provisionamento:
-
-- `monitoring/grafana/provisioning/datasources/prometheus.yml`;
-- `monitoring/grafana/provisioning/dashboards/ocean.yml`;
-- `monitoring/grafana/dashboards/ocean-overview.json`.
-
-### Langfuse
-
-Quando configurado, o Langfuse recebe um trace `ocean-chat` por requisição. O trace agrupa:
-
-- classificador de escopo;
-- execução do agente;
-- chamadas às ferramentas;
-- resultado da execução;
-- sessão da conversa;
-- usuário derivado de forma anônima;
-- score `scope_in_scope`, com `1.0` dentro do escopo e `0.0` fora do escopo.
-
-Falhas de inicialização, envio ou atualização no Langfuse não devem interromper o chat.
-
-## Testes
-
-Execute toda a suíte:
-
-```bash
-python -m pytest
-```
-
-Execuções específicas:
-
-```bash
-python -m pytest tests/api
-python -m pytest tests/security
-python -m pytest tests/observability
-python -m pytest tests/worker
-python -m pytest tests/mcp
-python -m pytest tests/core
-```
-
-Os testes cobrem, entre outros comportamentos:
-
-- limites de chat e leitura;
-- fallback do Redis;
-- isolamento de conversas;
-- limites de tamanho e quantidade;
-- identificação do cliente;
-- interação com o MCP;
-- normalização dos resultados e dos schemas das ferramentas MCP;
-- proveniência das fontes e atribuição;
-- recusa de respostas quando não há fontes disponíveis;
-- tracing Langfuse;
-- cache e execução isolada dos coletores.
-
-O workflow [Tests](/C:/Users/Rodrigo/Desktop/Codigo/ocean-agent-api/.github/workflows/tests.yml) roda a suíte completa no GitHub Actions em Python 3.12 para pushes em `main`/`master` e para pull requests. Os testes não exigem credenciais externas.
-
-## Arquitetura do repositório
+## Documentação
+
+- [Instalação e execução](docs/getting-started.md)
+- [Configuração e variáveis de ambiente](docs/configuration.md)
+- [Endpoints da API](docs/api.md)
+- [Segurança e limites](docs/security.md)
+- [Fluxo do agente e ferramentas MCP](docs/mcp.md)
+- [Arquitetura](docs/architecture.md)
+- [Worker em segundo plano](docs/worker.md)
+- [Observabilidade](docs/observability.md)
+- [Testes](docs/testing.md)
+- [Docker e deploy](docs/deployment.md)
+- [Limitações conhecidas](docs/limitations.md)
+
+## Estrutura resumida
 
 ```text
 src/
-├── agent/          Orquestração LangGraph e portão de escopo
-├── api/            Rotas, schemas, dependências e middleware
-├── conversations/  Modelos e repositório de conversas
-├── core/           Configuração e exceções
-├── llm/            Inicialização do provedor Groq
-├── mcp/            Cliente MCP e adaptação das ferramentas
-├── observability/  Logging, métricas e Langfuse
-├── security/       Limites, identificação e validações
-├── worker/         Cache, coletores e worker ARQ
-└── main.py         Inicialização da aplicação FastAPI
-```
-
-## Separação entre este projeto e o servidor MCP
-
-Este repositório é responsável pela API, pela configuração do Groq, pelas conversas, pelo agente, pelas regras de segurança e pelo tracing.
-
-O servidor MCP externo continua responsável pelas fontes marítimas e pelas ferramentas disponíveis. Não devem ser copiadas para esta API credenciais de Qdrant, Cloudflare, embeddings ou bancos de dados utilizados pelo servidor MCP.
-
-Variáveis relacionadas ao conhecimento marítimo pertencem ao servidor MCP e não são variáveis desta API:
-
-- `QDRANT_URL`;
-- `QDRANT_API_KEY`;
-- `QDRANT_COLLECTION`;
-- credenciais e modelo de embedding.
-
-### Contrato com o servidor MCP
-
-Toda ferramenta do servidor MCP devolve um objeto com `status` (`ok`, `partial`, `stale` ou `unavailable`), `source`, `source_url`, `retrieved_at`, `data_timestamp`, `freshness`, `attribution`, `license`, `data` e `limitations`. A API usa esses campos para montar `sources`, anexar atribuições e orientar o modelo a citar fonte e data e a admitir lacunas.
-
-Ferramentas esperadas em `ALLOWED_TOOLS` (todas de leitura):
-
-| Ferramenta | Função |
-|---|---|
-| `search_maritime_knowledge`, `list_knowledge_topics` | Conceitos, glossário e explicações |
-| `get_marine_conditions` | Vento, umidade, ondas e temperatura do mar (Open-Meteo) |
-| `get_tide_table` | Preamar e baixa-mar (Marinha do Brasil/DHN) |
-| `get_fishing_closures` | Defeso da pesca |
-| `search_vessels` | Busca de embarcações |
-| `find_fish_markets` | Onde vender pescado |
-
-Ao adicionar uma ferramenta nova no MCP, basta que ela use um desses nomes (ou acrescentar o nome em `ALLOWED_TOOLS`). Não é preciso alterar o código da API.
-
-**Ordem de deploy.** Publique primeiro o servidor MCP novo e depois esta API. No Render, remova a variável `ALLOWED_TOOLS` do serviço (para valer o padrão do código) ou atualize-a com os nomes acima; uma variável de ambiente definida no painel sobrescreve o padrão. Os nomes antigos em português (`buscar_conhecimento`, `listar_topicos`) continuam existindo no MCP apenas como aliases de transição e não devem ser liberados aqui.
-
-## Limitações conhecidas
-
-- No plano gratuito do Render, o MCP dorme após alguns minutos parado. A primeira pergunta depois de uma pausa pode demorar até `MCP_COLD_START_TIMEOUT_SECONDS`; se o servidor não acordar nesse prazo, o agente recusa em vez de responder de memória.
-
-- As conversas são armazenadas somente em memória. Reinicializações apagam o histórico.
-- Sem Redis, os limites de requisição são válidos apenas dentro da instância que recebeu a requisição.
-- As proteções implementadas são verificações iniciais e não substituem uma análise completa de segurança de aplicações públicas.
-- Resultados do MCP e documentos recuperados devem continuar sendo tratados como dados não confiáveis.
-- Erros externos são registrados sem devolver credenciais ou detalhes internos aos clientes.
-- Os limites e guardrails não substituem autenticação de usuários, autorização persistente ou um banco de dados externo.
-- Os coletores do worker ainda não possuem integrações registradas.
-
-## Dependências Python
-
-As dependências diretas são declaradas em `pyproject.toml`. Para atualizar ou regenerar o arquivo de dependências fixadas:
-
-```bash
-python -m pip install pip-tools
-pip-compile pyproject.toml --extra test -o requirements.txt --upgrade
-```
-
-Gere `requirements.txt` em Linux ou remova dependências específicas do Windows durante uma exportação feita no Windows. Dependências como `pywin32` devem usar o marcador `sys_platform == "win32"` para não serem instaladas no GitHub Actions.
-
-Para uma instalação limpa baseada no projeto:
-
-```bash
-python -m pip install -e ".[test]"
-python -m pip check
+├── agent/          Agente LangGraph e classificação de escopo
+├── api/            Rotas, schemas e middleware
+├── conversations/  Histórico em memória
+├── core/           Configuração, fontes e exceções
+├── llm/            Integração Groq
+├── mcp/            Cliente e adaptação das ferramentas
+├── observability/  Logs, métricas e Langfuse
+├── security/       Guardrails e limites
+└── worker/         Worker ARQ e cache
 ```
