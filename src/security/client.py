@@ -2,17 +2,20 @@
 
 - IP (para limitar): vem da conexão ou do X-Forwarded-For, conforme os proxies confiáveis.
   Nunca use um header controlado pelo cliente para limitar, senão basta trocá-lo a cada pedido.
-- X-Client-Id (para isolar conversas): um UUID aleatório que o frontend guarda no navegador.
-  Funciona como segredo da conversa; não serve como limite.
+- Cookie de sessão (para isolar conversas): emitido e assinado pelo backend.
 """
 
 import hashlib
+import hmac
 import ipaddress
 import re
+import secrets
 
 from starlette.requests import Request
 
-_CLIENT_ID = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
+SESSION_COOKIE = "ocean_session"
+_SESSION_TOKEN = re.compile(r"^[a-f0-9]{64}\.[a-f0-9]{64}$")
+_DEVELOPMENT_SESSION_SECRET = secrets.token_hex(32)
 
 
 def _normalize_ip(raw: str) -> str:
@@ -46,9 +49,49 @@ def ip_key(ip: str) -> str:
     return _digest("ip:" + ip)
 
 
-def owner_key(request: Request, ip: str) -> str:
-    """Dono das conversas: X-Client-Id válido; sem ele, cai para o IP (compartilhado por NAT)."""
-    client_id = request.headers.get("x-client-id", "").strip()
-    if _CLIENT_ID.fullmatch(client_id):
-        return _digest("client:" + client_id)
-    return _digest("ip:" + ip)
+def _session_secret(configured_secret: str) -> str:
+    return configured_secret or _DEVELOPMENT_SESSION_SECRET
+
+
+def _sign_session(identifier: str, secret: str) -> str:
+    signature = hmac.new(
+        _session_secret(secret).encode("utf-8"),
+        identifier.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{identifier}.{signature}"
+
+
+def _new_session(secret: str) -> str:
+    identifier = secrets.token_hex(32)
+    return _sign_session(identifier, secret)
+
+
+def _valid_session(value: str, secret: str) -> bool:
+    if not _SESSION_TOKEN.fullmatch(value):
+        return False
+    identifier, signature = value.split(".", 1)
+    expected = _sign_session(identifier, secret).split(".", 1)[1]
+    return hmac.compare_digest(signature, expected)
+
+
+def establish_session(request: Request, secret: str) -> tuple[str, bool]:
+    """Obtém uma sessão assinada pelo backend ou cria uma para a resposta atual."""
+    current = request.cookies.get(SESSION_COOKIE, "")
+    if _valid_session(current, secret):
+        request.state.conversation_session = current
+        request.state.new_conversation_session = False
+        return current, False
+
+    created = _new_session(secret)
+    request.state.conversation_session = created
+    request.state.new_conversation_session = True
+    return created, True
+
+
+def owner_key(request: Request, ip: str, session_secret: str = "") -> str:
+    """Dono das conversas: sessão assinada pelo backend, nunca um header do cliente."""
+    session = getattr(request.state, "conversation_session", None)
+    if not session:
+        session, _ = establish_session(request, session_secret)
+    return _digest("session:" + session)

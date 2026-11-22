@@ -8,6 +8,13 @@ def test_mcp_headers_only_include_auth_when_configured():
     assert MCPClient(Settings())._headers() == {}
 
 
+def test_production_mcp_requires_https_and_authentication():
+    with pytest.raises(ConfigurationError, match="HTTPS"):
+        MCPClient(Settings(environment="production", mcp_server_url="http://mcp.test/mcp"))
+    with pytest.raises(ConfigurationError, match="MCP_AUTH_TOKEN"):
+        MCPClient(Settings(environment="production", mcp_server_url="https://mcp.test/mcp"))
+
+
 async def test_session_sends_bearer_header_and_accepts_two_stream_tuple():
     """Regressão: SDK novo não aceita headers=, exige http_client e devolve 2 streams."""
     from contextlib import asynccontextmanager
@@ -52,6 +59,7 @@ import pytest  # noqa: E402
 from mcp.types import CallToolResult, TextContent  # noqa: E402
 
 from src.core.exceptions import MCPError  # noqa: E402
+from src.core.exceptions import ConfigurationError  # noqa: E402
 from src.mcp import client as client_module  # noqa: E402
 from src.mcp.client import normalize_call_result  # noqa: E402
 

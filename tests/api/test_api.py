@@ -16,6 +16,9 @@ def test_chat_creates_conversation_and_returns_metadata(client):
         agent_cls.return_value.run = AsyncMock(return_value=AgentResult("Hello"))
         with patch("src.api.v1.routes.chat.get_settings") as get_settings:
             get_settings.return_value.groq_api_key = "test"
+            get_settings.return_value.environment = "development"
+            get_settings.return_value.mcp_server_url = "http://localhost:8001/mcp"
+            get_settings.return_value.mcp_auth_token = ""
             response = client.post("/api/v1/chat", json={"message": "Hi"})
 
     assert response.status_code == 200
