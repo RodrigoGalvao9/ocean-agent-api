@@ -45,8 +45,9 @@ def test_owner_uses_backend_signed_session_not_client_header():
         "2.2.2.2",
         secret,
     )
+    forged_value = session[:-1] + ("0" if session[-1] != "0" else "1")
     forged_session = owner_key(
-        _request({"Cookie": f"{SESSION_COOKIE}={session[:-1] + '0'}"}),
+        _request({"Cookie": f"{SESSION_COOKIE}={forged_value}"}),
         "1.1.1.1",
         secret,
     )
