@@ -528,8 +528,8 @@ Ferramentas esperadas em `ALLOWED_TOOLS` (todas de leitura):
 | Ferramenta | Função |
 |---|---|
 | `search_maritime_knowledge`, `list_knowledge_topics` | Conceitos, glossário e explicações |
-| `get_marine_conditions` | Vento, umidade, ondas e temperatura do mar |
-| `get_tide_table` | Preamar e baixa-mar |
+| `get_marine_conditions` | Vento, umidade, ondas e temperatura do mar (Open-Meteo) |
+| `get_tide_table` | Preamar e baixa-mar (Marinha do Brasil/DHN) |
 | `get_fishing_closures` | Defeso da pesca |
 | `search_vessels` | Busca de embarcações |
 | `find_fish_markets` | Onde vender pescado |

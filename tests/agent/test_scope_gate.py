@@ -55,6 +55,8 @@ async def test_write_tools_are_filtered_out():
 def test_default_allowlist_has_english_names_and_no_aliases_or_write_tools():
     allowed = Settings().allowed_tool_names
     assert {"search_maritime_knowledge", "get_tide_table", "get_marine_conditions"} <= allowed
+    assert "get_tide_table" in allowed
+    assert "get_marine_conditions" in allowed
     assert not allowed & {"buscar_conhecimento", "listar_topicos", "set_speed", "get_fleet_state"}
 
 

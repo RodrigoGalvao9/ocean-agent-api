@@ -11,6 +11,9 @@ from src.agent.prompts.system import (
 def test_prompt_covers_the_new_scope_and_drops_the_old_demo_language():
     for word in ("defeso", "embarcações", "pescado", "marés", "Marinha do Brasil"):
         assert word in SYSTEM_PROMPT
+    assert "DHN" in SYSTEM_PROMPT
+    assert "Diretoria de Hidrografia e Navegação" in SYSTEM_PROMPT
+    assert "Open-Meteo" in SYSTEM_PROMPT
     assert "fictícios" not in SYSTEM_PROMPT
     assert "tempestade" not in SYSTEM_PROMPT.lower()
 
@@ -33,6 +36,8 @@ def test_system_prompt_includes_todays_date_in_brasilia_time():
 def test_scope_classifier_accepts_fishing_and_tides():
     for word in ("defeso", "pesca", "marés", "embarcações"):
         assert word in SCOPE_CLASSIFIER_PROMPT
+    assert "DHN" in SCOPE_CLASSIFIER_PROMPT
+    assert "Open-Meteo" in SCOPE_CLASSIFIER_PROMPT
     assert "dúvida" in SCOPE_CLASSIFIER_PROMPT
 
 
