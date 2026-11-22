@@ -60,11 +60,11 @@ async def chat(
             name="ocean-chat",
             session_id=conversation.id,
             user_id=owner_id,
-            input_text=payload.message,
+            input_text=None,
             tags=[settings.environment],
         ) as trace:
             result = await agent.run(payload.message, history=history)
-            trace.set_output(result.text)
+            trace.set_output({"status": "completed", "source_count": len(result.sources)})
 
         sources = [source.model_dump(mode="json") for source in result.sources]
         await repository.add_message(

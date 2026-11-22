@@ -11,11 +11,13 @@ from src.core.config import Settings
 logger = structlog.get_logger()
 
 _enabled = False
+_capture_content = False
 
 
 def init_tracing(settings: Settings) -> bool:
     """Inicializa o cliente global do Langfuse. Retorna True se o tracing ficou ligado."""
-    global _enabled
+    global _capture_content, _enabled
+    _capture_content = settings.langfuse_capture_content
     if not settings.langfuse_enabled:
         _enabled = False
         logger.info("tracing.disabled", stage="startup", reason="missing_langfuse_keys")
@@ -56,7 +58,7 @@ def shutdown_tracing() -> None:
 
 def get_callbacks() -> list[Any]:
     """Callbacks do LangChain/LangGraph para anexar ao `config` de cada execução."""
-    if not _enabled:
+    if not _enabled or not _capture_content:
         return []
     try:
         from langfuse.langchain import CallbackHandler
@@ -73,7 +75,7 @@ class _RequestTrace:
     def __init__(self, span: Any | None) -> None:
         self._span = span
 
-    def set_output(self, output: str) -> None:
+    def set_output(self, output: Any) -> None:
         if self._span is None:
             return
         try:
@@ -88,7 +90,7 @@ def trace_request(
     name: str,
     session_id: str | None,
     user_id: str | None,
-    input_text: str,
+    input_text: str | None,
     tags: list[str] | None = None,
 ) -> Iterator[_RequestTrace]:
     """Abre o trace raiz da requisição. Tudo que rodar dentro dele (classificador, agente,

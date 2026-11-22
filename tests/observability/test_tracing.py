@@ -32,6 +32,7 @@ def test_enabled_tracing_exports_real_spans_with_session_and_scores(monkeypatch)
         Langfuse, "score_current_trace", lambda self, **kw: scores.append(kw)
     )
     monkeypatch.setattr(tracing, "_enabled", True)
+    monkeypatch.setattr(tracing, "_capture_content", True)
 
     assert len(tracing.get_callbacks()) == 1
     with tracing.trace_request(

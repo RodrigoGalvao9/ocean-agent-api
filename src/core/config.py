@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     # --- Proteção do chat público -------------------------------------------
+    # Sessão assinada pelo backend para ownership das conversas.
+    conversation_session_secret: str = ""
     # Sem REDIS_URL o limite roda em memória (vale para 1 instância e zera a cada deploy).
     redis_url: str = ""
     rate_limit_enabled: bool = True
@@ -65,6 +67,8 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"
     langfuse_sample_rate: float = 1.0
+    # Captura de prompts e respostas é opt-in para evitar enviar conteúdo de usuário ao SaaS.
+    langfuse_capture_content: bool = False
     # Protege o /metrics. Vazio = endpoint desligado fora do ambiente "development".
     metrics_token: str = ""
 
