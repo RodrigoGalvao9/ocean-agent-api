@@ -10,7 +10,12 @@ from src.agent.prompts.system import (
     REFUSAL_OUT_OF_SCOPE,
     build_system_prompt,
 )
-from src.agent.refiner import refine_question
+from src.agent.refiner import (
+    deterministic_refinement,
+    needs_llm_refinement,
+    normalize_marine_terms,
+    refine_question,
+)
 from src.agent.reviewer import (
     deterministic_response_review,
     validate_complex_response,
@@ -110,10 +115,12 @@ class OceanAgent:
             return AgentResult(REFUSAL_OUT_OF_SCOPE)
 
         # Camada opcional: refinador estruturado via OpenRouter.
-        refined_message = clean_message
-        route = "live_data"
+        normalized_message = normalize_marine_terms(clean_message)
+        refined_message = normalized_message
+        deterministic = deterministic_refinement(normalized_message)
+        route = deterministic.route
         refiner = create_openrouter_refiner(self.settings)
-        if refiner is not None:
+        if refiner is not None and needs_llm_refinement(normalized_message, history):
             refined = await refine_question(
                 refiner,
                 clean_message,

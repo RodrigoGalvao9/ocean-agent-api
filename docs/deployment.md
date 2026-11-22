@@ -36,3 +36,5 @@ Em produção:
 - `OPENROUTER_API_KEY` ativa o refinador opcional da pergunta;
 - `OPENROUTER_REFINER_MODEL` define o modelo barato usado pelo refinador.
 - `OPENROUTER_VALIDATOR_MODEL` define o modelo usado para revisar consultas complexas.
+- `OPENROUTER_REFINER_ENABLED=false` desliga chamadas externas ao refinador;
+- `OPENROUTER_REFINER_TIMEOUT_SECONDS` deve permanecer baixo para evitar esperas longas.

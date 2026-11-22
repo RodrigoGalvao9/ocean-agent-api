@@ -18,14 +18,15 @@ def create_llm(settings: Settings) -> BaseChatModel:
 
 
 def create_openrouter_refiner(settings: Settings) -> BaseChatModel | None:
-    if not settings.openrouter_api_key:
+    if not settings.openrouter_api_key or not settings.openrouter_refiner_enabled:
         return None
     return ChatOpenAI(
         api_key=settings.openrouter_api_key,
         base_url=settings.openrouter_base_url,
         model=settings.openrouter_refiner_model,
         temperature=0,
-        timeout=settings.request_timeout_seconds,
+        timeout=settings.openrouter_refiner_timeout_seconds,
+        max_tokens=300,
     )
 
 
@@ -37,5 +38,6 @@ def create_openrouter_validator(settings: Settings) -> BaseChatModel | None:
         base_url=settings.openrouter_base_url,
         model=settings.openrouter_validator_model,
         temperature=0,
-        timeout=settings.request_timeout_seconds,
+        timeout=settings.openrouter_validator_timeout_seconds,
+        max_tokens=500,
     )

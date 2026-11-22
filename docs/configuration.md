@@ -39,6 +39,9 @@ Não registre valores reais ou credenciais no repositório.
 | `OPENROUTER_REFINER_MODEL` | `nvidia/nemotron-3.5-lightning:free` | Modelo usado para estruturar a pergunta |
 | `OPENROUTER_VALIDATOR_MODEL` | `nvidia/nemotron-3-ultra:free` | Modelo usado para revisar consultas complexas |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Endpoint compatível da OpenRouter |
+| `OPENROUTER_REFINER_ENABLED` | `true` | Usa o Lightning somente em perguntas ambíguas |
+| `OPENROUTER_REFINER_TIMEOUT_SECONDS` | `8` | Timeout curto do refinador |
+| `OPENROUTER_VALIDATOR_TIMEOUT_SECONDS` | `15` | Timeout do validador complexo |
 
 ## Redis e conversas
 
