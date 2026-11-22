@@ -33,3 +33,6 @@ Em produção:
 - `CONVERSATION_SESSION_SECRET` deve ser um segredo forte;
 - `ENVIRONMENT=production`;
 - `METRICS_TOKEN` deve proteger `/metrics`, quando utilizado.
+- `OPENROUTER_API_KEY` ativa o refinador opcional da pergunta;
+- `OPENROUTER_REFINER_MODEL` define o modelo barato usado pelo refinador.
+- `OPENROUTER_VALIDATOR_MODEL` define o modelo usado para revisar consultas complexas.
