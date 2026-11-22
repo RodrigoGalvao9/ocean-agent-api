@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, Response
 
 from src.api.middleware.limits import BodySizeLimitMiddleware, MetricsMiddleware
 from src.api.middleware.request_id import RequestIDMiddleware
+from src.api.middleware.session import ConversationSessionMiddleware
 from src.api.v1.router import router as v1_router
 from src.conversations.memory_repository import InMemoryConversationRepository
 from src.core.config import get_settings
@@ -18,6 +19,8 @@ from src.observability.tracing import init_tracing, shutdown_tracing
 from src.security.rate_limit import build_rate_limiter
 
 settings = get_settings()
+if settings.environment != "development" and not settings.conversation_session_secret:
+    raise RuntimeError("CONVERSATION_SESSION_SECRET is required outside development")
 configure_logging(settings.log_level)
 init_tracing(settings)
 logger = structlog.get_logger()
@@ -42,10 +45,11 @@ app = FastAPI(
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(ConversationSessionMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-Client-Id", "X-Request-ID"],
     expose_headers=["X-Request-ID", "Retry-After"],

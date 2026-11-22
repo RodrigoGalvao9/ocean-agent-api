@@ -5,12 +5,13 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
 
 from src.core.config import Settings
-from src.core.exceptions import MCPError
+from src.core.exceptions import ConfigurationError, MCPError
 from src.observability.metrics import MCP_CALLS, MCP_LATENCY
 
 logger = structlog.get_logger()
@@ -67,6 +68,12 @@ def normalize_call_result(result: Any) -> dict[str, Any]:
 class MCPClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        parsed = urlparse(settings.mcp_server_url)
+        if settings.environment != "development":
+            if parsed.scheme != "https":
+                raise ConfigurationError("MCP_SERVER_URL must use HTTPS outside development")
+            if not settings.mcp_auth_token:
+                raise ConfigurationError("MCP_AUTH_TOKEN is required outside development")
 
     def _headers(self) -> dict[str, str]:
         if not self.settings.mcp_auth_token:

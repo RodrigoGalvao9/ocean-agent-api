@@ -15,10 +15,10 @@ DAY = 86_400
 
 
 def get_owner_id(request: Request) -> str:
-    """Hash do dono da conversa (X-Client-Id ou IP). Nunca é devolvido ao cliente."""
+    """Hash da sessão emitida pelo backend. Nunca é devolvido ao cliente."""
     settings = get_settings()
     ip = get_client_ip(request, settings.trusted_proxy_hops)
-    return owner_key(request, ip)
+    return owner_key(request, ip, settings.conversation_session_secret)
 
 
 def _reject(scope: str, result: RateLimitResult) -> HTTPException:
