@@ -84,7 +84,7 @@ python -m pip install -e ".[test]"
 Copy-Item .env.example .env
 ```
 
-Preencha o arquivo `.env` antes de iniciar a API. Em particular, `GROQ_API_KEY` e `MCP_SERVER_URL` são necessários para executar o chat. `MCP_AUTH_TOKEN` só é necessário quando o servidor MCP exige autenticação bearer.
+Preencha o arquivo `.env` antes de iniciar a API. Em particular, `GROQ_API_KEY` e `MCP_SERVER_URL` são necessários para executar o chat. Fora de `development`, `MCP_SERVER_URL` deve usar HTTPS, `MCP_AUTH_TOKEN` é obrigatório e `CONVERSATION_SESSION_SECRET` deve ser um segredo aleatório forte.
 
 O arquivo `.env.example` contém os nomes e os valores padrão de todas as opções reconhecidas pelo projeto. Valores reais ou secretos não devem ser registrados no repositório.
 
@@ -104,6 +104,7 @@ O arquivo `.env.example` contém os nomes e os valores padrão de todas as opç�
 | `MCP_WARM_WINDOW_SECONDS` | `600` | Por quanto tempo, após uma resposta, o MCP é considerado acordado |
 | `MCP_TOOLS_CACHE_TTL_SECONDS` | `300` | Por quanto tempo a lista de ferramentas é reaproveitada |
 | `MAX_TOOL_OUTPUT_CHARS` | `12000` | Limite do texto de cada ferramenta enviado ao modelo |
+| `CONVERSATION_SESSION_SECRET` | vazio em development | Segredo usado para assinar o cookie HttpOnly de ownership das conversas; obrigatório fora de development |
 | `LOG_LEVEL` | `INFO` | Nível dos logs estruturados |
 | `ENVIRONMENT` | `development` | Ambiente de execução |
 
@@ -141,8 +142,9 @@ Sem `REDIS_URL`, os contadores são mantidos somente na instância local e são 
 | `LANGFUSE_SECRET_KEY` | vazio | Chave secreta Langfuse |
 | `LANGFUSE_HOST` | `https://cloud.langfuse.com` | Endpoint Langfuse |
 | `LANGFUSE_SAMPLE_RATE` | `1.0` | Taxa de amostragem |
+| `LANGFUSE_CAPTURE_CONTENT` | `false` | Permite enviar prompts, respostas e chamadas ao Langfuse; mantenha desativado por padrão |
 
-O rastreamento fica desativado quando as duas chaves Langfuse estão vazias. É seguro deixar o ambiente de desenvolvimento sem essas credenciais.
+O rastreamento fica desativado quando as duas chaves Langfuse estão vazias. Mesmo habilitado, o conteúdo de prompts e respostas não é enviado por padrão; `LANGFUSE_CAPTURE_CONTENT=true` deve ser usado somente quando isso for aceitável para o ambiente e a política de retenção.
 
 ### Métricas
 
@@ -236,18 +238,16 @@ Resposta esperada:
 ### Envio de mensagem
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/chat \
+curl -c cookies.txt -b cookies.txt -X POST http://localhost:8000/api/v1/chat \
   -H 'Content-Type: application/json' \
-  -H 'X-Client-Id: 550e8400-e29b-41d4-a716-446655440000' \
   -d '{"message":"Quais são as condições marítimas de Santos?"}'
 ```
 
 Uma chamada sem `conversation_id` cria uma nova conversa. Para continuar uma conversa existente, reutilize o `conversation_id` retornado pela resposta:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/chat \
+curl -c cookies.txt -b cookies.txt -X POST http://localhost:8000/api/v1/chat \
   -H 'Content-Type: application/json' \
-  -H 'X-Client-Id: 550e8400-e29b-41d4-a716-446655440000' \
   -d '{
     "message":"E amanhã?",
     "conversation_id":"CONVERSATION_ID"
@@ -281,19 +281,19 @@ A resposta inclui o texto, o identificador da conversa e as **fontes consultadas
 
 `sources` vem vazio quando nenhuma ferramenta foi usada (recusas, por exemplo). As fontes também ficam em `metadata.sources` de cada mensagem do assistente nas rotas de conversa. Quando uma fonte exige crédito (Open-Meteo, Global Fishing Watch), a atribuição é anexada ao final do texto pelo código, no formato `Atribuição: ...`.
 
-O cabeçalho `X-Client-Id` isola as conversas no repositório em memória. Um valor válido contém entre 16 e 64 caracteres alfanuméricos, `_` ou `-`. Quando o cabeçalho não é informado ou é inválido, o proprietário é derivado do endereço IP.
+O backend emite o cookie `ocean_session`, `HttpOnly` e assinado, para identificar o proprietário das conversas. O cabeçalho legado `X-Client-Id` é ignorado para ownership. Clientes web cross-origin, como o [`ocean-frontend`](https://github.com/RodrigoGalvao9/ocean-frontend), devem enviar as requisições com `credentials: "include"`.
 
 ### Listagem de conversas
 
 ```bash
-curl -H 'X-Client-Id: 550e8400-e29b-41d4-a716-446655440000' \
+curl -b cookies.txt \
   http://localhost:8000/api/v1/conversations
 ```
 
 ### Consulta de uma conversa
 
 ```bash
-curl -H 'X-Client-Id: 550e8400-e29b-41d4-a716-446655440000' \
+curl -b cookies.txt \
   http://localhost:8000/api/v1/conversations/CONVERSATION_ID
 ```
 
@@ -301,7 +301,7 @@ curl -H 'X-Client-Id: 550e8400-e29b-41d4-a716-446655440000' \
 
 ```bash
 curl -X DELETE \
-  -H 'X-Client-Id: 550e8400-e29b-41d4-a716-446655440000' \
+  -b cookies.txt \
   http://localhost:8000/api/v1/conversations/CONVERSATION_ID
 ```
 

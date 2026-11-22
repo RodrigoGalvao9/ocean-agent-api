@@ -67,17 +67,26 @@ def test_rate_limit_can_be_disabled(client):
 
 
 def test_conversations_are_isolated_between_clients(client):
+    client.cookies.clear()
     conversation_id = _chat(client, headers=CLIENT_A).json()["conversation_id"]
+    session_a = client.cookies.get("ocean_session")
+    client.cookies.clear()
+    client.get("/health")
+    session_b = client.cookies.get("ocean_session")
 
-    assert [c["id"] for c in client.get("/api/v1/conversations", headers=CLIENT_A).json()] == [
-        conversation_id
-    ]
-    assert client.get("/api/v1/conversations", headers=CLIENT_B).json() == []
-    assert client.get(f"/api/v1/conversations/{conversation_id}", headers=CLIENT_B).status_code == 404
-    assert client.delete(f"/api/v1/conversations/{conversation_id}", headers=CLIENT_B).status_code == 404
+    client.cookies.clear()
+    client.cookies.set("ocean_session", session_a)
+    assert [c["id"] for c in client.get("/api/v1/conversations").json()] == [conversation_id]
+    client.cookies.clear()
+    client.cookies.set("ocean_session", session_b)
+    assert client.get("/api/v1/conversations").json() == []
+    assert client.get(f"/api/v1/conversations/{conversation_id}").status_code == 404
+    assert client.delete(f"/api/v1/conversations/{conversation_id}").status_code == 404
     # B também não consegue continuar a conversa de A
-    assert _chat(client, headers=CLIENT_B, conversation_id=conversation_id).status_code == 400
-    assert client.get(f"/api/v1/conversations/{conversation_id}", headers=CLIENT_A).status_code == 200
+    assert _chat(client, conversation_id=conversation_id).status_code == 400
+    client.cookies.clear()
+    client.cookies.set("ocean_session", session_a)
+    assert client.get(f"/api/v1/conversations/{conversation_id}").status_code == 200
 
 
 def test_owner_id_is_never_exposed(client):
@@ -110,6 +119,25 @@ def test_cors_allows_only_configured_origins(client):
         headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "POST"},
     )
     assert "access-control-allow-origin" not in blocked.headers
+
+
+def test_cors_allows_session_credentials(client):
+    response = client.options(
+        "/api/v1/chat",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+
+def test_backend_issues_http_only_conversation_session(client):
+    response = client.get("/health")
+    cookie = response.headers["set-cookie"]
+    assert "ocean_session=" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
 
 
 def test_429_still_carries_cors_headers(client, tight_limits):

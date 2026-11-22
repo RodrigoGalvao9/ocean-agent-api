@@ -1,6 +1,6 @@
 from starlette.requests import Request
 
-from src.security.client import get_client_ip, owner_key
+from src.security.client import SESSION_COOKIE, establish_session, get_client_ip, owner_key
 
 
 def _request(headers: dict[str, str], host: str = "10.0.0.1") -> Request:
@@ -29,12 +29,27 @@ def test_ipv6_is_collapsed_to_its_64_prefix():
     assert a == b
 
 
-def test_owner_uses_valid_client_id_otherwise_ip():
-    valid = "a" * 32
-    with_id = owner_key(_request({"X-Client-Id": valid}), "1.1.1.1")
-    other_ip = owner_key(_request({"X-Client-Id": valid}), "2.2.2.2")
-    invalid = owner_key(_request({"X-Client-Id": "curto"}), "1.1.1.1")
-    no_header = owner_key(_request({}), "1.1.1.1")
-    assert with_id == other_ip  # o id vale mais que o IP
-    assert invalid == no_header  # id inválido cai para o IP
-    assert with_id != no_header
+def test_owner_uses_backend_signed_session_not_client_header():
+    secret = "s" * 64
+    issuing_request = _request({})
+    session, created = establish_session(issuing_request, secret)
+    assert created
+
+    with_session = owner_key(
+        _request({"Cookie": f"{SESSION_COOKIE}={session}", "X-Client-Id": "a" * 32}),
+        "1.1.1.1",
+        secret,
+    )
+    same_session = owner_key(
+        _request({"Cookie": f"{SESSION_COOKIE}={session}", "X-Client-Id": "b" * 32}),
+        "2.2.2.2",
+        secret,
+    )
+    forged_session = owner_key(
+        _request({"Cookie": f"{SESSION_COOKIE}={session[:-1] + '0'}"}),
+        "1.1.1.1",
+        secret,
+    )
+
+    assert with_session == same_session
+    assert with_session != forged_session
