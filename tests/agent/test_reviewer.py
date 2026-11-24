@@ -33,3 +33,12 @@ def test_clear_questions_skip_external_refiner():
 def test_deterministic_refinement_detects_route():
     assert deterministic_refinement("Compare a maré em Recife e Santos").route == "complex"
     assert deterministic_refinement("O que é preamar").route == "knowledge"
+
+
+def test_deterministic_review_blocks_claims_that_fishing_is_open():
+    from src.agent.reviewer import deterministic_response_review as review
+
+    assert review("Você pode pescar lagosta agora.")
+    assert review("A pesca está liberada em Recife.")
+    assert not review("Hoje a lagosta está em defeso; não pode pescar até 30/04.")
+    assert not review("Não encontrei defeso, mas isso não significa que a pesca não está liberada.")

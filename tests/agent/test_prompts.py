@@ -43,3 +43,10 @@ def test_scope_classifier_accepts_fishing_and_tides():
 
 def test_refusal_names_the_new_topics():
     assert "defeso" in REFUSAL_OUT_OF_SCOPE and "pescado" in REFUSAL_OUT_OF_SCOPE
+
+
+def test_prompt_teaches_the_fishing_closures_tool():
+    assert "get_fishing_closures" in SYSTEM_PROMPT
+    assert "NOME de um lugar" in SYSTEM_PROMPT
+    assert "NÃO significa que a pesca esteja liberada" in SYSTEM_PROMPT
+    assert "IBAMA ou no Ministério da\n   Pesca e Aquicultura" in SYSTEM_PROMPT

@@ -21,11 +21,13 @@
 | `list_knowledge_topics` | Lista tópicos de conhecimento |
 | `get_marine_conditions` | Condições meteorológicas e marítimas Open-Meteo |
 | `get_tide_table` | Marés da Marinha do Brasil/DHN |
-| `get_fishing_closures` | Defeso da pesca |
+| `get_fishing_closures` | Defeso da pesca por lugar do litoral (IBAMA/MPA) |
 | `search_vessels` | Busca de embarcações |
 | `find_fish_markets` | Locais para vender pescado |
 
-Somente `search_maritime_knowledge`, `list_knowledge_topics`, `get_marine_conditions` e `get_tide_table` estão implementadas no servidor MCP atual.
+Estão implementadas no servidor MCP atual: `search_maritime_knowledge`, `list_knowledge_topics`, `get_marine_conditions`, `get_tide_table` e `get_fishing_closures`. `search_vessels` e `find_fish_markets` ainda não existem no servidor (são ignoradas na descoberta).
+
+`get_fishing_closures` exige `place` (nome do lugar); `species`, `date` (AAAA-MM-DD) e `days_ahead` são opcionais. Status `partial` quer dizer que não há defeso cadastrado para o pedido, o que não prova que a pesca esteja liberada.
 
 ## Contrato de proveniência
 
