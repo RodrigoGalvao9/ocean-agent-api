@@ -277,7 +277,7 @@ starlette==1.10.0
     #   fastapi
     #   mcp
     #   sse-starlette
-structlog==25.5.0
+structlog==26.1.0
     # via ocean-agent-api (pyproject.toml)
 tenacity==9.2.1
     # via langchain-core
