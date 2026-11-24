@@ -10,6 +10,7 @@ from src.core.exceptions import MCPError
 from src.core.sources import SourceRecorder
 from src.mcp.client import MCPClient
 from src.observability.metrics import MCP_TOOL_CALLS, MCP_TOOL_LATENCY
+from src.core.exceptions import GuardrailError
 from src.security.guardrails import validate_tool_invocation
 
 _JSON_TYPES: dict[str, type] = {
@@ -90,12 +91,13 @@ def mcp_tools_to_langchain(
 ) -> list[StructuredTool]:
     logger = structlog.get_logger()
     adapters: list[StructuredTool] = []
+    tool_names = frozenset(str(t.get("name", "")) for t in tools)
     for tool in tools:
         name = str(tool.get("name", ""))
         description = str(tool.get("description") or "MCP tool")
         input_schema = tool.get("inputSchema") or tool.get("input_schema") or {}
 
-        def make_invoker(tool_name: str):
+        def make_invoker(tool_name: str, input_schema: dict[str, Any]):
             async def invoke_tool(**kwargs: Any) -> str:
                 # Parâmetros opcionais que o modelo deixou nulos não vão ao servidor: lá valem
                 # os padrões da ferramenta.
@@ -110,7 +112,26 @@ def mcp_tools_to_langchain(
                                 arguments[key] = min(max(int(arguments[key]), 1), rag_top_k)
                             except (TypeError, ValueError):
                                 arguments[key] = rag_top_k
-                validate_tool_invocation(tool_name, arguments)
+                declared = frozenset(input_schema.get("properties", {}))
+                try:
+                    validate_tool_invocation(
+                        tool_name,
+                        arguments,
+                        allowed_tools=tool_names,
+                        allowed_arguments=declared or None,
+                    )
+                except GuardrailError:
+                    # O modelo recebe o erro e pode corrigir os argumentos; a requisição não cai.
+                    logger.warning("mcp.tool_rejected", stage="mcp_tool_rejected", tool_name=tool_name)
+                    MCP_TOOL_CALLS.labels(tool=tool_name, status="rejected").inc()
+                    return json.dumps(
+                        {
+                            "status": "unavailable",
+                            "error": "invalid_arguments",
+                            "limitations": ["Os argumentos enviados à ferramenta são inválidos."],
+                        },
+                        ensure_ascii=False,
+                    )
                 logger.info("mcp.tool_invoked", stage="mcp_tool_invoked", tool_name=tool_name)
 
                 started = time.perf_counter()
@@ -137,7 +158,7 @@ def mcp_tools_to_langchain(
                 name=name,
                 description=description,
                 args_schema=_argument_model(name, input_schema),
-                coroutine=make_invoker(name),
+                coroutine=make_invoker(name, input_schema),
             )
         )
     return adapters

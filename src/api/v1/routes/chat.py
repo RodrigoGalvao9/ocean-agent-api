@@ -13,6 +13,7 @@ from src.core.config import get_settings
 from src.core.exceptions import ConfigurationError, GuardrailError
 from src.mcp.client import MCPClient
 from src.observability.tracing import trace_request
+from src.security.guardrails import is_blocked, validate_user_message
 from src.security.validation import ChatRequest
 
 router = APIRouter(tags=["chat"])
@@ -35,6 +36,9 @@ async def chat(
     logger.info("request.received", stage="request_received")
 
     try:
+        # Valida antes de criar conversa ou gravar qualquer coisa: mensagem bloqueada não pode
+        # ficar no histórico, senão voltaria ao modelo nas próximas perguntas.
+        validate_user_message(payload.message)
         if payload.conversation_id:
             conversation = await repository.get(payload.conversation_id, owner_id)
             if conversation is None:
@@ -48,6 +52,7 @@ async def chat(
             else AIMessage(content=item.content)
             for item in conversation.messages
             if item.role in (MessageRole.USER, MessageRole.ASSISTANT)
+            and not (item.role is MessageRole.USER and is_blocked(item.content))
         ]
         await repository.add_message(
             conversation.id,

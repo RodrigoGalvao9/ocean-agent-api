@@ -146,3 +146,40 @@ async def test_rag_top_k_is_capped_by_configuration():
         "search_maritime_knowledge",
         {"query": "o que é preamar?", "k": 5},
     )
+
+
+async def test_invalid_arguments_are_returned_to_the_model_and_never_reach_the_server():
+    client = MagicMock()
+    client.invoke_tool = AsyncMock()
+    before = MCP_TOOL_CALLS.labels(tool="get_x", status="rejected")._value.get()
+
+    out = json.loads(await _adapter(client).ainvoke({"query": "x" * 1001}))
+
+    assert out["status"] == "unavailable" and out["error"] == "invalid_arguments"
+    client.invoke_tool.assert_not_awaited()
+    assert MCP_TOOL_CALLS.labels(tool="get_x", status="rejected")._value.get() == before + 1
+
+
+async def test_each_tool_keeps_its_own_schema_when_several_are_loaded():
+    """Regressão: o schema usado dentro da chamada era o da ÚLTIMA ferramenta do loop."""
+    client = MagicMock()
+    client.invoke_tool = AsyncMock(return_value={"status": "ok", "source": "RAG", "data": {}})
+    rag = {
+        "name": "search_maritime_knowledge",
+        "description": "RAG",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}, "top_k": {"type": "integer"}},
+            "required": ["query"],
+        },
+    }
+    other = {
+        "name": "get_tide_table",
+        "description": "Marés",
+        "inputSchema": {"type": "object", "properties": {"place": {"type": "string"}}},
+    }
+    tools = mcp_tools_to_langchain([rag, other], client, rag_top_k=3)
+
+    await tools[0].ainvoke({"query": "preamar"})
+
+    client.invoke_tool.assert_awaited_with("search_maritime_knowledge", {"query": "preamar", "top_k": 3})
