@@ -121,7 +121,7 @@ langchain-openai==0.3.35
     # via ocean-agent-api (pyproject.toml)
 langchain-text-splitters==0.3.11
     # via langchain
-langfuse==4.18.0
+langfuse==5.2.0
     # via ocean-agent-api (pyproject.toml)
 langgraph==0.6.11
     # via ocean-agent-api (pyproject.toml)

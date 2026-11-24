@@ -19,7 +19,7 @@ dependencies = [
   "arq>=0.26,<1",
   "prometheus-client>=0.20,<1",
   # langfuse 5.x exige langchain-core>=1; mantemos 4.x enquanto o projeto usa langchain-core 0.3.
-  "langfuse>=4,<5",
+  "langfuse>=4,<6",
   "langchain>=0.3,<1",
 ]
 
