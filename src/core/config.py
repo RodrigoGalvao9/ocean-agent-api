@@ -48,7 +48,10 @@ class Settings(BaseSettings):
     # Limite do texto de cada ferramenta enviado ao modelo (controla custo em tokens).
     max_tool_output_chars: int = 12_000
     log_level: str = "INFO"
-    environment: str = "development"
+    # Seguro por padrão: sem ENVIRONMENT definido o serviço age como produção (exige sessão
+    # assinada, MCP em HTTPS com token e /metrics protegido). Para desenvolvimento local,
+    # defina ENVIRONMENT=development (o .env.example já faz isso).
+    environment: str = "production"
 
     # --- CORS ---------------------------------------------------------------
     # Origens do frontend, separadas por vírgula (ex.: https://ocean-frontend.onrender.com).
@@ -93,6 +96,21 @@ class Settings(BaseSettings):
     @property
     def langfuse_enabled(self) -> bool:
         return bool(self.langfuse_public_key and self.langfuse_secret_key)
+
+
+def validate_runtime_settings(settings: Settings) -> None:
+    """Falha na subida, e não na primeira requisição, quando a configuração é insegura.
+
+    Só vale fora de `development`: lá o servidor MCP local sem token e em HTTP é esperado.
+    """
+    if settings.environment == "development":
+        return
+    if not settings.conversation_session_secret:
+        raise RuntimeError("CONVERSATION_SESSION_SECRET is required outside development")
+    if not settings.mcp_auth_token:
+        raise RuntimeError("MCP_AUTH_TOKEN is required outside development")
+    if not settings.mcp_server_url.lower().startswith("https://"):
+        raise RuntimeError("MCP_SERVER_URL must use HTTPS outside development")
 
 
 @lru_cache

@@ -30,7 +30,7 @@ Não registre valores reais ou credenciais no repositório.
 | `API_HOST` | `0.0.0.0` | Interface HTTP |
 | `API_PORT` | `8000` | Porta HTTP |
 | `LOG_LEVEL` | `INFO` | Nível de logs |
-| `ENVIRONMENT` | `development` | Ambiente de execução |
+| `ENVIRONMENT` | `production` | Ambiente de execução. Fora de `development` a API exige `CONVERSATION_SESSION_SECRET`, `MCP_AUTH_TOKEN` e `MCP_SERVER_URL` em HTTPS, e só sobe se todos estiverem definidos. Para rodar localmente, use `ENVIRONMENT=development` |
 | `CORS_ORIGINS` | `http://localhost:5173` | Origens separadas por vírgula |
 | `TRUSTED_PROXY_HOPS` | `1` | Quantidade de proxies confiáveis |
 | `GROQ_API_KEY` | vazio | Chave do modelo principal Groq |

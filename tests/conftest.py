@@ -2,6 +2,9 @@ import os
 
 import pytest
 
+# O padrão do Settings é "production"; os testes rodam como desenvolvimento.
+os.environ["ENVIRONMENT"] = "development"
+
 for _variable in (
     "MCP_AUTH_TOKEN",
     "LANGFUSE_PUBLIC_KEY",

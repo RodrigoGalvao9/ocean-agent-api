@@ -11,7 +11,7 @@ from src.api.middleware.request_id import RequestIDMiddleware
 from src.api.middleware.session import ConversationSessionMiddleware
 from src.api.v1.router import router as v1_router
 from src.conversations.memory_repository import InMemoryConversationRepository
-from src.core.config import get_settings
+from src.core.config import get_settings, validate_runtime_settings
 from src.core.exceptions import OceanAgentError
 from src.observability.logging import configure_logging
 from src.observability.metrics import render_metrics
@@ -19,8 +19,7 @@ from src.observability.tracing import init_tracing, shutdown_tracing
 from src.security.rate_limit import build_rate_limiter
 
 settings = get_settings()
-if settings.environment != "development" and not settings.conversation_session_secret:
-    raise RuntimeError("CONVERSATION_SESSION_SECRET is required outside development")
+validate_runtime_settings(settings)
 configure_logging(settings.log_level)
 init_tracing(settings)
 logger = structlog.get_logger()

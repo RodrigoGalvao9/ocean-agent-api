@@ -1,0 +1,49 @@
+name: Security
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 9 * * 1"   # segunda-feira, 09:00 UTC: pega CVEs novas sem precisar de commit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dependencies:
+    name: Vulnerabilidades (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Relatório apenas, por enquanto: as versões corrigidas das bibliotecas langchain/langgraph
+    # exigem a série 1.x, e o projeto está preso em <1 por causa do langfuse 4.x (ver
+    # pyproject.toml). Quando migrar, remova a linha abaixo para o job passar a bloquear.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Instalar
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          python -m pip install -r requirements.txt
+          python -m pip install -e ".[test]"
+      - name: Auditar
+        run: pip-audit --skip-editable
+
+  secrets:
+    name: Segredos (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # varre o histórico inteiro, não só o último commit
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
