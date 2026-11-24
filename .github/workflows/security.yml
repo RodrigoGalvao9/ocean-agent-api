@@ -17,10 +17,6 @@ jobs:
     name: Vulnerabilidades (pip-audit)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Relatório apenas, por enquanto: as versões corrigidas das bibliotecas langchain/langgraph
-    # exigem a série 1.x, e o projeto está preso em <1 por causa do langfuse 4.x (ver
-    # pyproject.toml). Quando migrar, remova a linha abaixo para o job passar a bloquear.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

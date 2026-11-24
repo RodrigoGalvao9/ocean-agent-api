@@ -101,7 +101,17 @@ def mcp_tools_to_langchain(
             async def invoke_tool(**kwargs: Any) -> str:
                 # Parâmetros opcionais que o modelo deixou nulos não vão ao servidor: lá valem
                 # os padrões da ferramenta.
-                arguments = {k: v for k, v in kwargs.items() if v is not None}
+                properties = input_schema.get("properties", {})
+                arguments = {
+                    k: v
+                    for k, v in kwargs.items()
+                    if v is not None
+                    and not (
+                        k in properties
+                        and "default" in properties[k]
+                        and v == properties[k]["default"]
+                    )
+                }
                 if tool_name == "search_maritime_knowledge":
                     properties = input_schema.get("properties", {})
                     for key in ("top_k", "limit", "k", "max_results"):
